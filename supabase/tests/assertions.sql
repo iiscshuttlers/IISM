@@ -30,6 +30,16 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 
+-- Confirmed logins (Google sign-ins are always confirmed).
+INSERT INTO auth.users (id, email, email_confirmed_at) VALUES
+  ('aaaaaaaa-0000-0000-0000-000000000001', 'admin@x.test', now()),
+  ('aaaaaaaa-0000-0000-0000-000000000002', 'coach@x.test', now()),
+  ('aaaaaaaa-0000-0000-0000-000000000011', 'p1@x.test', now()),
+  ('aaaaaaaa-0000-0000-0000-000000000012', 'p2@x.test', now()),
+  ('aaaaaaaa-0000-0000-0000-000000000013', 'p3@x.test', now()),
+  ('aaaaaaaa-0000-0000-0000-000000000014', 'p4@x.test', now()),
+  ('aaaaaaaa-0000-0000-0000-000000000099', 'out@x.test', now());
+
 CREATE TEMP TABLE ids (k text PRIMARY KEY, v uuid);
 GRANT ALL ON ids TO anon, authenticated;
 
@@ -48,6 +58,39 @@ DO $$ BEGIN
     RAISE EXCEPTION 'roster size wrong';
   END IF;
 END $$;
+
+-- 0. Claiming needs a CONFIRMED email from auth.users; the JWT email claim is not trusted.
+INSERT INTO ids SELECT 'late', public.add_camp_person((SELECT v FROM ids WHERE k='camp'), 'Late Joiner', 'M', 'late@x.test', 'player');
+RESET ROLE;
+INSERT INTO auth.users (id, email, email_confirmed_at) VALUES
+  ('aaaaaaaa-0000-0000-0000-000000000077', 'late@x.test', NULL),        -- signed up, not confirmed
+  ('aaaaaaaa-0000-0000-0000-000000000078', 'mallory@x.test', now());    -- confirmed, different email
+SELECT pg_temp.as_user('aaaaaaaa-0000-0000-0000-000000000077', 'late@x.test');
+DO $$ BEGIN
+  IF public.claim_my_profile() IS NOT NULL THEN RAISE EXCEPTION 'unconfirmed sign-up claimed a profile'; END IF;
+END $$;
+-- Forged JWT email: Mallory's token claims to be p1, whose profile is still unclaimed.
+SELECT pg_temp.as_user('aaaaaaaa-0000-0000-0000-000000000078', 'p1@x.test');
+DO $$ BEGIN
+  IF public.claim_my_profile() IS NOT NULL THEN RAISE EXCEPTION 'JWT email was trusted for claiming'; END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM public.people WHERE email IN ('late@x.test', 'p1@x.test')
+             AND auth_user_id IN ('aaaaaaaa-0000-0000-0000-000000000077', 'aaaaaaaa-0000-0000-0000-000000000078')) THEN
+    RAISE EXCEPTION 'profile linked to an unproven login';
+  END IF;
+END $$;
+UPDATE auth.users SET email_confirmed_at = now() WHERE id = 'aaaaaaaa-0000-0000-0000-000000000077';
+SELECT pg_temp.as_user('aaaaaaaa-0000-0000-0000-000000000077', 'late@x.test');
+DO $$ BEGIN
+  IF public.claim_my_profile() IS DISTINCT FROM (SELECT v FROM ids WHERE k='late') THEN
+    RAISE EXCEPTION 'confirmed sign-up could not claim';
+  END IF;
+END $$;
+-- Remove the extra player so later roster counts stay as designed.
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+SELECT public.remove_camp_member((SELECT v FROM ids WHERE k='camp'), (SELECT v FROM ids WHERE k='late'));
 
 SELECT pg_temp.as_user(:u_coach, 'coach@x.test'); SELECT public.claim_my_profile() IS NOT NULL AS coach_claimed;
 SELECT pg_temp.as_user(:u_p1, 'p1@x.test');       SELECT public.claim_my_profile() IS NOT NULL AS p1_claimed;

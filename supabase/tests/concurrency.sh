@@ -11,7 +11,10 @@ psql() { docker exec -i "$CONTAINER" psql -U postgres -h localhost -q -v ON_ERRO
 psql -c "create database $DB" >/dev/null
 trap 'psql -c "drop database if exists $DB" >/dev/null' EXIT
 psql -d "$DB" < supabase/tests/bootstrap.sql
-psql -d "$DB" < supabase/migrations/0001_camp.sql
+for m in $(ls supabase/migrations/*.sql | sort); do psql -d "$DB" < "$m"; done
+psql -d "$DB" -c "INSERT INTO auth.users (id, email, email_confirmed_at) VALUES
+  ('aaaaaaaa-0000-0000-0000-000000000001', 'admin@x.test', now()),
+  ('aaaaaaaa-0000-0000-0000-000000000002', 'coach@x.test', now())" >/dev/null
 
 AS='SELECT set_config($$request.jwt.claim.sub$$, :sub, false), set_config($$request.jwt.claim.email$$, :email, false); SET ROLE authenticated;'
 ADMIN="-v sub='aaaaaaaa-0000-0000-0000-000000000001' -v email='admin@x.test'"

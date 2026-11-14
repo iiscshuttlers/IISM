@@ -1,7 +1,22 @@
 import { createClient } from "@supabase/supabase-js";
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+/** Accepts "abc.supabase.co" as well as "https://abc.supabase.co"; returns null if unusable. */
+export function normalizeSupabaseUrl(raw: string | undefined): string | null {
+  const v = raw?.trim().replace(/\/+$/, "");
+  if (!v) return null;
+  const withScheme = /^https?:\/\//i.test(v) ? v : `https://${v}`;
+  try {
+    const u = new URL(withScheme);
+    // Needs a real host (e.g. abc.supabase.co or localhost), not a stray "https:".
+    if (!u.hostname.includes(".") && u.hostname !== "localhost") return null;
+    return u.origin;
+  } catch {
+    return null;
+  }
+}
+
+const url = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL as string | undefined);
+const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
 
 export const supabaseConfigured = Boolean(url && anonKey);
 
