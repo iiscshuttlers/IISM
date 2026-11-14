@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
 import { useAdminMutations, useRosterAdmin } from "../lib/api";
@@ -85,30 +85,54 @@ export default function SettingsPage() {
       </Card>
 
       <Card>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-bold">Roster · {players.length} players, {staff.length} staff</h2>
+        <div className="mb-2 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-bold">Roster · {players.length} players, {staff.length} staff</h2>
+            <p className="text-xs text-ink-soft mt-0.5">
+              Click any person or the <strong>Edit</strong> button to change name, email, gender, role, or remove them.
+            </p>
+          </div>
           <Button size="sm" onClick={() => setAdding(true)}><Plus size={14} /> Add person</Button>
         </div>
-        <p className="mb-3 text-xs text-ink-soft">
-          You create every profile. Email is optional: add one only if that person should sign in with Google.
-        </p>
-        <div className="divide-y divide-line">
+        <div className="divide-y divide-line mt-3">
           {[...staff, ...players].map((r) => (
-            <div key={r.person_id} className="flex items-center gap-2 py-2">
+            <div
+              key={r.person_id}
+              className="flex items-center justify-between gap-3 py-2.5 px-2 -mx-2 rounded-lg hover:bg-surface-2/70 transition group"
+            >
               <button className="min-w-0 flex-1 text-left" onClick={() => setEditing(r)}>
-                <p className="truncate text-sm font-semibold">
-                  {r.full_name} {r.gender && <span className="font-normal text-ink-soft">({r.gender})</span>}
-                </p>
-                <p className="truncate text-xs text-ink-soft">
-                  {r.email ? (r.signed_in ? `${r.email} · signed in` : `${r.email} · not signed in yet`) : "No login"}
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-sm font-semibold text-ink group-hover:text-brand transition">
+                    {r.full_name} {r.gender && <span className="font-normal text-ink-soft">({r.gender})</span>}
+                  </p>
+                  {r.role !== "player" && <Badge tone="brand">{r.role}</Badge>}
+                </div>
+                <p className="truncate text-xs text-ink-soft mt-0.5">
+                  {r.email ? (r.signed_in ? `${r.email} · signed in` : `${r.email} · not signed in yet`) : "No login email"}
                 </p>
               </button>
-              {r.role !== "player" && <Badge tone="brand">{r.role}</Badge>}
-              <label className="flex items-center gap-1 text-xs text-ink-soft" title="Activity updates for this person">
-                <input type="checkbox" checked={!r.activity_muted} aria-label={`Activity for ${r.full_name}`}
-                  onChange={(e) => mut.setMuted.mutate({ person_id: r.person_id, muted: !e.target.checked }, { onError: onErr })} />
-                Updates
-              </label>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <label className="hidden sm:flex items-center gap-1 text-xs text-ink-soft mr-1" title="Activity updates for this person">
+                  <input
+                    type="checkbox"
+                    checked={!r.activity_muted}
+                    aria-label={`Activity for ${r.full_name}`}
+                    onChange={(e) => mut.setMuted.mutate({ person_id: r.person_id, muted: !e.target.checked }, { onError: onErr })}
+                  />
+                  Updates
+                </label>
+
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="h-7 px-2 text-xs flex items-center gap-1 font-medium text-ink-soft hover:text-ink"
+                  onClick={() => setEditing(r)}
+                >
+                  <Pencil size={12} />
+                  <span>Edit</span>
+                </Button>
+              </div>
             </div>
           ))}
         </div>
@@ -123,10 +147,10 @@ export default function SettingsPage() {
           })} />
       </Sheet>
 
-      <Sheet open={!!editing} onClose={() => setEditing(null)} title={editing?.full_name ?? ""}>
+      <Sheet open={!!editing} onClose={() => setEditing(null)} title={editing ? `Edit ${editing.full_name}` : ""}>
         {editing && (
           <div className="space-y-5">
-            <PersonForm initial={editing} busy={mut.updatePerson.isPending || mut.setRole.isPending} submitLabel="Save"
+            <PersonForm initial={editing} busy={mut.updatePerson.isPending || mut.setRole.isPending} submitLabel="Save changes"
               onSubmit={async (v) => {
                 try {
                   await mut.updatePerson.mutateAsync({ person_id: editing.person_id, full_name: v.full_name, gender: v.gender, email: v.email });
@@ -136,11 +160,30 @@ export default function SettingsPage() {
                 } catch (e) { onErr(e); }
               }} />
             {editing.person_id !== s.meId && (
-              <Button variant="ghost" className="w-full text-red-600" onClick={() => {
-                if (confirm(`Remove ${editing.full_name} from the camp?`)) {
-                  mut.remove.mutate(editing.person_id, { onSuccess: () => { toast.success("Removed"); setEditing(null); }, onError: onErr });
-                }
-              }}>Remove from camp</Button>
+              <div className="pt-4 border-t border-line">
+                <p className="text-xs font-semibold text-red-600 mb-1">Danger Zone</p>
+                <p className="text-xs text-ink-soft mb-3">
+                  Removing this person removes them from the roster and standings.
+                </p>
+                <Button
+                  variant="ghost"
+                  className="w-full text-red-600 border border-red-200 hover:bg-red-50 flex items-center justify-center gap-1.5"
+                  onClick={() => {
+                    if (confirm(`Remove ${editing.full_name} from the camp? This cannot be undone.`)) {
+                      mut.remove.mutate(editing.person_id, {
+                        onSuccess: () => {
+                          toast.success(`${editing.full_name} removed from camp`);
+                          setEditing(null);
+                        },
+                        onError: onErr,
+                      });
+                    }
+                  }}
+                >
+                  <Trash2 size={14} />
+                  <span>Remove from camp</span>
+                </Button>
+              </div>
             )}
           </div>
         )}
@@ -156,29 +199,41 @@ function PersonForm({ initial, onSubmit, busy, submitLabel }: {
   submitLabel: string;
 }) {
   const [v, setV] = useState({
-    full_name: initial?.full_name ?? "", gender: initial?.gender ?? "", email: initial?.email ?? "", role: initial?.role ?? ("player" as Role),
+    full_name: initial?.full_name ?? "",
+    gender: initial?.gender ?? "",
+    email: initial?.email ?? "",
+    role: initial?.role ?? ("player" as Role),
   });
   return (
     <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); onSubmit({ ...v, full_name: v.full_name.trim(), email: v.email.trim() }); }}>
-      <Field label="Full name"><Input required maxLength={80} value={v.full_name} onChange={(e) => setV({ ...v, full_name: e.target.value })} /></Field>
+      <Field label="Full name">
+        <Input required maxLength={80} value={v.full_name} placeholder="e.g. Lakshya Sen" onChange={(e) => setV({ ...v, full_name: e.target.value })} />
+      </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Gender">
           <Select value={v.gender} onChange={(e) => setV({ ...v, gender: e.target.value })}>
             <option value="">Not set</option>
-            <option value="M">Male</option>
-            <option value="F">Female</option>
+            <option value="M">Male (M)</option>
+            <option value="F">Female (F)</option>
           </Select>
         </Field>
         <Field label="Role">
           <Select value={v.role} onChange={(e) => setV({ ...v, role: e.target.value as Role })}>
             <option value="player">Player</option>
             <option value="coach">Coach</option>
-            <option value="admin">Camp admin</option>
+            <option value="admin">Camp Admin</option>
           </Select>
         </Field>
       </div>
-      <Field label="Google email (optional)" hint={initial?.signed_in ? "Changing it signs out the current login link." : "Leave empty if they won't sign in."}>
-        <Input type="email" value={v.email} onChange={(e) => setV({ ...v, email: e.target.value })} placeholder="name@gmail.com" />
+      <Field
+        label="Login Email (optional)"
+        hint={
+          initial?.signed_in
+            ? "Changing this email will reset their current login link."
+            : "Required for Google Sign-in or Password login. Leave blank if player will not log in."
+        }
+      >
+        <Input type="email" value={v.email} onChange={(e) => setV({ ...v, email: e.target.value })} placeholder="player@gmail.com" />
       </Field>
       <Button type="submit" className="w-full" disabled={busy}>{submitLabel}</Button>
     </form>
