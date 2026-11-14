@@ -117,6 +117,16 @@ export function LiveCourtScorer({
     }
   };
 
+  const subPoint = (side: "A" | "B") => {
+    if (side === "A" && scoreA > 0) {
+      setScoreLog((prev) => [...prev, { a: scoreA, b: scoreB }]);
+      setScoreA((a) => a - 1);
+    } else if (side === "B" && scoreB > 0) {
+      setScoreLog((prev) => [...prev, { a: scoreA, b: scoreB }]);
+      setScoreB((b) => b - 1);
+    }
+  };
+
   const undoPoint = () => {
     if (scoreLog.length === 0) return;
     const last = scoreLog[scoreLog.length - 1];
@@ -337,13 +347,25 @@ export function LiveCourtScorer({
                     >
                       {scoreA}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => addPoint("A")}
-                      className="w-full py-3.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-base shadow active:scale-95 transition cursor-pointer"
-                    >
-                      +1 Point
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={scoreA === 0}
+                        onClick={() => subPoint("A")}
+                        title="Subtract 1 point"
+                        aria-label="Subtract 1 point from Team 1"
+                        className="px-3.5 py-3 rounded-xl bg-emerald-950/70 hover:bg-emerald-950 border border-emerald-600/50 text-emerald-200 font-black text-sm shadow active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                      >
+                        -1
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addPoint("A")}
+                        className="flex-1 py-3 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-base shadow active:scale-95 transition cursor-pointer"
+                      >
+                        +1 Point
+                      </button>
+                    </div>
                   </div>
 
                   {/* Team B Side */}
@@ -357,13 +379,25 @@ export function LiveCourtScorer({
                     >
                       {scoreB}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => addPoint("B")}
-                      className="w-full py-3.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-base shadow active:scale-95 transition cursor-pointer"
-                    >
-                      +1 Point
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={scoreB === 0}
+                        onClick={() => subPoint("B")}
+                        title="Subtract 1 point"
+                        aria-label="Subtract 1 point from Team 2"
+                        className="px-3.5 py-3 rounded-xl bg-emerald-950/70 hover:bg-emerald-950 border border-emerald-600/50 text-emerald-200 font-black text-sm shadow active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                      >
+                        -1
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addPoint("B")}
+                        className="flex-1 py-3 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-base shadow active:scale-95 transition cursor-pointer"
+                      >
+                        +1 Point
+                      </button>
+                    </div>
                   </div>
                 </div>
 
