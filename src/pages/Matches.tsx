@@ -11,7 +11,7 @@ import { MatchCard } from "../components/MatchCard";
 import { PairingHelperModal } from "../components/PairingHelper";
 import { LiveCourtScorer } from "../components/LiveCourtScorer";
 import { TournamentGeneratorModal } from "../components/TournamentGenerator";
-import { Button, Empty, Field, Input, PageTitle, Segmented, Sheet, Textarea } from "../components/ui";
+import { Button, ConfirmDialog, Empty, Field, Input, PageTitle, Segmented, Sheet, Textarea } from "../components/ui";
 import type { Category } from "../lib/scores";
 import type { Match } from "../lib/types";
 
@@ -32,7 +32,53 @@ export default function MatchesPage() {
   const [editing, setEditing] = useState<Match | null>(null);
   const [disputing, setDisputing] = useState<Match | null>(null);
   const [resolving, setResolving] = useState<Match | null>(null);
+  const [deletingMatch, setDeletingMatch] = useState<Match | null>(null);
   const [reason, setReason] = useState("");
+
+  const handleResolveClick = (m: Match) => {
+    if (m.status === "void") {
+      mut.resolve.mutate(
+        { id: m.id, status: "confirmed", games: m.games, winner: m.winner_side },
+        {
+          onSuccess: () => toast.success("Match restored to camp standings!"),
+          onError: (e) => toast.error(errorText(e)),
+        }
+      );
+    } else if (m.status === "confirmed") {
+      setDeletingMatch(m);
+    } else if (m.status === "disputed") {
+      setResolving(m);
+    }
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deletingMatch) return;
+    const target = deletingMatch;
+    mut.resolve.mutate(
+      { id: target.id, status: "void", games: target.games, winner: target.winner_side },
+      {
+        onSuccess: () => {
+          setDeletingMatch(null);
+          toast.success("Match deleted from standings", {
+            action: {
+              label: "Undo",
+              onClick: () => {
+                mut.resolve.mutate(
+                  { id: target.id, status: "confirmed", games: target.games, winner: target.winner_side },
+                  {
+                    onSuccess: () => toast.success("Match restored to standings!"),
+                    onError: (e) => toast.error(errorText(e)),
+                  }
+                );
+              },
+            },
+            duration: 8000,
+          });
+        },
+        onError: (e) => toast.error(errorText(e)),
+      }
+    );
+  };
 
   // ?new=1 opens the record sheet (Today page, app shortcut); &cat=&slots= pre-fills it.
   useEffect(() => {
@@ -218,7 +264,7 @@ export default function MatchesPage() {
         <div className="space-y-2">
           {list.map((m) => (
             <MatchCard key={m.id} match={m} people={people} meId={s.meId} isStaff={s.isStaff}
-              onEdit={setEditing} onDispute={(x) => { setReason(""); setDisputing(x); }} onResolve={setResolving}
+              onEdit={setEditing} onDispute={(x) => { setReason(""); setDisputing(x); }} onResolve={handleResolveClick}
               onRematch={players.length >= 2 ? rematch : undefined} />
           ))}
         </div>
@@ -319,6 +365,17 @@ export default function MatchesPage() {
           setPrefill({ category: cat, slots });
           setRecording(true);
         }}
+      />
+
+      <ConfirmDialog
+        open={!!deletingMatch}
+        title="Delete this match?"
+        message="This match will be voided and removed from camp standings. You can restore (undo) it at any time."
+        confirmLabel="Delete match"
+        cancelLabel="Cancel"
+        tone="danger"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeletingMatch(null)}
       />
     </div>
   );

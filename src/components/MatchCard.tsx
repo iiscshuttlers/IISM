@@ -1,4 +1,4 @@
-import { Repeat, Share2 } from "lucide-react";
+import { Repeat, Share2, Trash2, RotateCcw } from "lucide-react";
 import { Badge, Button, cx, fmtDate } from "./ui";
 import { CATEGORIES, isSingles } from "../lib/scores";
 import { shareMatchOnWhatsApp } from "../lib/whatsappShare";
@@ -74,9 +74,31 @@ export function MatchCard({ match: m, people, meId, isStaff, onEdit, onDispute, 
               <Repeat size={13} /> Rematch
             </Button>
           )}
-          {isStaff && onResolve && (
-            <Button size="sm" variant="ghost" onClick={() => onResolve(m)}>
-              {m.status === "disputed" ? "Resolve" : m.status === "void" ? "Restore" : "Void"}
+          {isStaff && onResolve && m.status === "void" && (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200"
+              onClick={() => onResolve(m)}
+            >
+              <RotateCcw size={12} className="mr-1" />
+              <span>Restore (Undo)</span>
+            </Button>
+          )}
+          {isStaff && onResolve && m.status === "confirmed" && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-ink-soft hover:text-red-600"
+              onClick={() => onResolve(m)}
+            >
+              <Trash2 size={12} className="mr-1" />
+              <span>Delete</span>
+            </Button>
+          )}
+          {isStaff && onResolve && m.status === "disputed" && (
+            <Button size="sm" variant="secondary" onClick={() => onResolve(m)}>
+              Resolve
             </Button>
           )}
         </div>
