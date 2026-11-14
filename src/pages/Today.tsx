@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Plus, Flame, Check } from "lucide-react";
+import { Plus, Flame, Check, LineChart } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
 import { useAttendance, useDrills, useMatches, useMembers, useSessions, useStandings, useTrainingMutations } from "../lib/api";
@@ -9,6 +9,8 @@ import { PairingHelperModal } from "../components/PairingHelper";
 import { CampHighlightsCard } from "../components/CampHighlights";
 import { Badge, Button, Card, Empty, fmtDate, today } from "../components/ui";
 import { DRILL_TYPES } from "../lib/types";
+import { WellnessCheckin } from "../components/WellnessCheckin";
+import { InstallCard } from "../components/AppChrome";
 
 export default function TodayPage() {
   const s = useSession();
@@ -122,6 +124,22 @@ export default function TodayPage() {
         </Card>
       )}
 
+      <InstallCard />
+
+      {isPlayer && s.meId && <WellnessCheckin campId={campId} meId={s.meId} />}
+
+      {s.isStaff && (
+        <Link href="/insights">
+          <Card className="flex items-center gap-3 p-3 hover:border-brand/40">
+            <LineChart size={18} className="text-brand" />
+            <div className="flex-1">
+              <p className="text-xs font-semibold text-ink">Insights for selection</p>
+              <p className="text-[11px] text-ink-soft">Compare players, best doubles pairs, training load and readiness.</p>
+            </div>
+          </Card>
+        </Link>
+      )}
+
       {/* Pairing Helper Quick Banner */}
       {playerMembers.length >= 2 && (
         <Card className="flex items-center justify-between p-3 bg-surface-2 border-line">
@@ -133,8 +151,8 @@ export default function TodayPage() {
             players={playerMembers}
             matches={matches.data ?? []}
             standings={standings.data ?? []}
-            onSelectMatch={() => {
-              setLoc(`/matches?new=1`);
+            onSelectMatch={(cat, slots) => {
+              setLoc(`/matches?new=1&cat=${cat}&slots=${slots.map((x) => x ?? "").join(",")}`);
             }}
           />
         </Card>

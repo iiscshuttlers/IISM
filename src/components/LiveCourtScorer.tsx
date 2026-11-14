@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Play, RotateCcw, Trophy, Check } from "lucide-react";
 import { toast } from "sonner";
-import { Button, Card, Field, Select, Sheet } from "./ui";
+import { Button, Card, ConfirmDialog, Field, Select, Sheet } from "./ui";
 import { CATEGORIES, isSingles, slotGenders, type Category } from "../lib/scores";
 import type { Member } from "../lib/types";
 import type { MatchInput } from "../lib/api";
@@ -33,6 +33,8 @@ export function LiveCourtScorer({
   const [winsA, setWinsA] = useState(0);
   const [winsB, setWinsB] = useState(0);
   const [scoreLog, setScoreLog] = useState<{ a: number; b: number }[]>([]);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmFinish, setConfirmFinish] = useState(false);
 
   const setsToWin = matchFormat === "1_set" ? 1 : 2;
   const deuceAt = targetPoints - 1;
@@ -380,11 +382,7 @@ export function LiveCourtScorer({
                   {gamesHistory.length > 0 && (
                     <button
                       type="button"
-                      onClick={() => {
-                        if (confirm("Finish match now and record completed sets?")) {
-                          setStep("finished");
-                        }
-                      }}
+                      onClick={() => setConfirmFinish(true)}
                       className="text-xs text-amber-300 hover:text-amber-100 font-semibold underline underline-offset-2"
                     >
                       Finish match now
@@ -393,11 +391,7 @@ export function LiveCourtScorer({
 
                   <button
                     type="button"
-                    onClick={() => {
-                      if (confirm("Cancel live scoring and reset?")) {
-                        setStep("setup");
-                      }
-                    }}
+                    onClick={() => setConfirmReset(true)}
                     className="text-xs text-emerald-300/80 hover:text-red-300 transition"
                   >
                     Reset match
@@ -444,6 +438,34 @@ export function LiveCourtScorer({
           </Card>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmReset}
+        title="Cancel live scoring?"
+        message="Current game points and progress will be reset. Are you sure you want to stop?"
+        confirmLabel="Yes, reset match"
+        cancelLabel="Keep playing"
+        tone="danger"
+        onConfirm={() => {
+          setConfirmReset(false);
+          setStep("setup");
+        }}
+        onCancel={() => setConfirmReset(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmFinish}
+        title="Finish match early?"
+        message="The currently completed sets will be recorded as the official match score."
+        confirmLabel="Finish & save"
+        cancelLabel="Continue playing"
+        tone="brand"
+        onConfirm={() => {
+          setConfirmFinish(false);
+          setStep("finished");
+        }}
+        onCancel={() => setConfirmFinish(false)}
+      />
     </Sheet>
   );
 }

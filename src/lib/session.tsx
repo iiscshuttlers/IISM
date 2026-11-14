@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Session as AuthSession } from "@supabase/supabase-js";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { outbox } from "./outbox";
 import { must, supabase } from "./supabase";
 import { useCamps, useIsSiteAdmin, useRole } from "./api";
 import type { Camp, Role } from "./types";
@@ -23,6 +24,8 @@ interface Ctx {
 
 const SessionContext = createContext<Ctx | null>(null);
 const CAMP_KEY = "camp.selected";
+/** localStorage key of the persisted React Query cache (see main.tsx). */
+export const CACHE_KEY = "camp.cache.v1";
 
 function readStoredCamp(): string | null {
   try { return localStorage.getItem(CAMP_KEY); } catch { return null; }
@@ -32,6 +35,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<AuthSession | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [campId, setCampIdState] = useState<string | null>(readStoredCamp);
+  const qc = useQueryClient();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -76,7 +80,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     isAdmin: role.data === "admin",
     loading: authLoading || (!!userId && (me.isLoading || (hasProfile && (camps.isLoading || siteAdmin.isLoading || (!!camp && role.isLoading))))),
     signOut: async () => {
+      const unsent = outbox.all().filter((i) => !i.error).length;
+      if (unsent && !window.confirm(`${unsent} match result${unsent === 1 ? " is" : "s are"} still waiting to send. Signing out deletes ${unsent === 1 ? "it" : "them"} from this phone. Sign out anyway?`)) {
+        return;
+      }
       await supabase.auth.signOut();
+      // Nothing from this account stays on a shared phone.
+      outbox.clear();
+      qc.clear();
+      try { localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
     },
   };
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

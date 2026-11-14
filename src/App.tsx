@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { Suspense, lazy, type ReactNode } from "react";
 import { Link, Redirect, Route, Router, Switch, useLocation } from "wouter";
-import { Bell, CalendarDays, ClipboardList, Dumbbell, LogOut, Settings, Swords, Trophy, Users } from "lucide-react";
+import { Bell, CalendarDays, ClipboardList, Dumbbell, LogOut, Settings, Sun, Swords, Trophy, Users } from "lucide-react";
+import { useState } from "react";
 import { useSession } from "./lib/session";
 import { supabaseConfigured } from "./lib/supabase";
 import { useActivity } from "./lib/api";
@@ -8,12 +9,16 @@ import { Button, Select, cx } from "./components/ui";
 import { LoginPage, NoCampPage, NotOnRosterPage, SetupNeededPage } from "./pages/Gate";
 import TodayPage from "./pages/Today";
 import MatchesPage from "./pages/Matches";
-import StandingsPage from "./pages/Standings";
-import TrainingPage from "./pages/Training";
-import SquadPage from "./pages/Squad";
-import SelectionPage from "./pages/Selection";
-import SettingsPage from "./pages/Settings";
-import ActivityPage from "./pages/Activity";
+
+// Less-used pages load on demand (the service worker still precaches them for offline use).
+const StandingsPage = lazy(() => import("./pages/Standings"));
+const TrainingPage = lazy(() => import("./pages/Training"));
+const SquadPage = lazy(() => import("./pages/Squad"));
+const SelectionPage = lazy(() => import("./pages/Selection"));
+const SettingsPage = lazy(() => import("./pages/Settings"));
+const ActivityPage = lazy(() => import("./pages/Activity"));
+const InsightsPage = lazy(() => import("./pages/Insights"));
+import { ConnectionBar, SyncEngine, applyOutdoor, readOutdoor } from "./components/AppChrome";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -27,6 +32,7 @@ export default function App() {
   return (
     <Router base={base}>
       <Shell>
+        <Suspense fallback={<Splash />}>
         <Switch>
           <Route path="/" component={TodayPage} />
           <Route path="/matches" component={MatchesPage} />
@@ -35,9 +41,11 @@ export default function App() {
           <Route path="/squad" component={SquadPage} />
           <Route path="/activity" component={ActivityPage} />
           {s.isStaff && <Route path="/selection" component={SelectionPage} />}
+          {s.isStaff && <Route path="/insights" component={InsightsPage} />}
           {s.isAdmin && <Route path="/settings" component={SettingsPage} />}
           <Route><Redirect to="/" /></Route>
         </Switch>
+        </Suspense>
       </Shell>
     </Router>
   );
@@ -56,6 +64,7 @@ function Shell({ children }: { children: ReactNode }) {
   const [loc] = useLocation();
   const activity = useActivity(s.camp?.id);
   const unread = (activity.data ?? []).filter((a) => !a.read_at).length;
+  const [outdoor, setOutdoor] = useState(readOutdoor);
 
   const nav = [
     { href: "/", label: "Today", icon: CalendarDays },
@@ -86,6 +95,12 @@ function Shell({ children }: { children: ReactNode }) {
             )}
             <p className="text-xs text-ink-soft capitalize">{s.role ?? "member"} · Training camp</p>
           </div>
+          <button type="button" aria-pressed={outdoor} aria-label="Outdoor mode (high contrast)"
+            title="Outdoor mode: high contrast, bigger buttons"
+            onClick={() => { applyOutdoor(!outdoor); setOutdoor(!outdoor); }}
+            className={cx("rounded-lg p-2 hover:bg-surface-2", outdoor ? "text-brand" : "text-ink-soft")}>
+            <Sun size={20} />
+          </button>
           <Link href="/activity" aria-label={`Activity${unread ? `, ${unread} unread` : ""}`}
             className="relative rounded-lg p-2 text-ink-soft hover:bg-surface-2">
             <Bell size={20} />
@@ -102,7 +117,9 @@ function Shell({ children }: { children: ReactNode }) {
           )}
           <Button variant="ghost" size="sm" onClick={s.signOut} aria-label="Sign out"><LogOut size={18} /></Button>
         </div>
+        <ConnectionBar campId={s.camp!.id} />
       </header>
+      <SyncEngine campId={s.camp!.id} />
 
       <main className="px-4 py-5">{children}</main>
 

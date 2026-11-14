@@ -135,6 +135,59 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
   );
 }
 
+export function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  tone = "danger",
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: string;
+  message?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: "danger" | "brand";
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-[2px]"
+      onClick={onCancel}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-2xl bg-surface border border-line p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150"
+      >
+        <div className="space-y-1.5">
+          <h3 className="text-base font-bold text-ink">{title}</h3>
+          {message && <p className="text-xs text-ink-soft leading-relaxed">{message}</p>}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button variant="secondary" size="sm" onClick={onCancel}>
+            {cancelLabel}
+          </Button>
+          <Button
+            variant={tone === "danger" ? "danger" : "primary"}
+            size="sm"
+            onClick={onConfirm}
+          >
+            {confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export const today = () => new Date().toLocaleDateString("en-CA");
 export const fmtDate = (d: string) =>
   new Date(d + (d.length === 10 ? "T00:00:00" : "")).toLocaleDateString("en-IN", { day: "numeric", month: "short" });

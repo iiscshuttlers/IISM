@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { useSession } from "../lib/session";
 import { useAdminMutations, useRosterAdmin } from "../lib/api";
 import { errorText } from "../lib/supabase";
-import { Badge, Button, Card, Field, Input, PageTitle, Segmented, Select, Sheet, Toggle } from "../components/ui";
+import { Badge, Button, Card, ConfirmDialog, Field, Input, PageTitle, Segmented, Select, Sheet, Toggle } from "../components/ui";
 import { CsvExportCard } from "../components/CsvExport";
 import type { RosterAdminRow, Role } from "../lib/types";
 
@@ -15,6 +15,7 @@ export default function SettingsPage() {
   const mut = useAdminMutations(camp.id);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<RosterAdminRow | null>(null);
+  const [confirmDeletePerson, setConfirmDeletePerson] = useState<RosterAdminRow | null>(null);
   const [details, setDetails] = useState({
     name: camp.name, starts_on: camp.starts_on ?? "", ends_on: camp.ends_on ?? "", selection_target: camp.selection_target,
   });
@@ -168,17 +169,7 @@ export default function SettingsPage() {
                 <Button
                   variant="ghost"
                   className="w-full text-red-600 border border-red-200 hover:bg-red-50 flex items-center justify-center gap-1.5"
-                  onClick={() => {
-                    if (confirm(`Remove ${editing.full_name} from the camp? This cannot be undone.`)) {
-                      mut.remove.mutate(editing.person_id, {
-                        onSuccess: () => {
-                          toast.success(`${editing.full_name} removed from camp`);
-                          setEditing(null);
-                        },
-                        onError: onErr,
-                      });
-                    }
-                  }}
+                  onClick={() => setConfirmDeletePerson(editing)}
                 >
                   <Trash2 size={14} />
                   <span>Remove from camp</span>
@@ -188,6 +179,27 @@ export default function SettingsPage() {
           </div>
         )}
       </Sheet>
+
+      <ConfirmDialog
+        open={!!confirmDeletePerson}
+        title={`Remove ${confirmDeletePerson?.full_name}?`}
+        message="This player will be permanently removed from the camp roster and standings."
+        confirmLabel="Remove player"
+        cancelLabel="Cancel"
+        tone="danger"
+        onConfirm={() => {
+          if (!confirmDeletePerson) return;
+          mut.remove.mutate(confirmDeletePerson.person_id, {
+            onSuccess: () => {
+              toast.success(`${confirmDeletePerson.full_name} removed from camp`);
+              setConfirmDeletePerson(null);
+              setEditing(null);
+            },
+            onError: onErr,
+          });
+        }}
+        onCancel={() => setConfirmDeletePerson(null)}
+      />
     </div>
   );
 }

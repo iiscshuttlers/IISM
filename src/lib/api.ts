@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { must, supabase } from "./supabase";
+import { isNetworkError, newClientId, outbox, recordArgs } from "./outbox";
 import type {
   ActivityRow, Assessment, Attendance, Camp, Drill, Match, Member, Person, Role,
-  RosterAdminRow, SelectionRow, Session, SquadRow, Standing,
+  RosterAdminRow, SelectionRow, Session, SquadRow, Standing, Wellness,
 } from "./types";
 import type { Category } from "./scores";
 
@@ -111,8 +112,24 @@ export function useMatchMutations(campId: string) {
   const inv = useInvalidate();
   const after = () => inv("matches", "standings", "activity");
   return {
+    /** Saves now, or queues on the phone when offline (then `queued` is true). */
     record: useMutation({
-      mutationFn: async (m: MatchInput) => must(await supabase.rpc("record_match", { p_camp: campId, ...matchArgs(m) })),
+      mutationFn: async (m: MatchInput): Promise<{ id: string | null; queued: boolean }> => {
+        const clientId = newClientId();
+        const queue = () => {
+          outbox.add({ clientId, campId, input: m, queuedAt: new Date().toISOString() });
+          return { id: null, queued: true };
+        };
+        if (typeof navigator !== "undefined" && navigator.onLine === false) return queue();
+        try {
+          const res = await supabase.rpc("record_match", recordArgs(campId, m, clientId));
+          if (res.error && isNetworkError(res.error)) return queue();
+          return { id: must(res) as string, queued: false };
+        } catch (e) {
+          if (isNetworkError(e)) return queue();
+          throw e;
+        }
+      },
       onSuccess: after,
     }),
     edit: useMutation({
@@ -145,7 +162,7 @@ export const useSessions = (campId: string | undefined) =>
       must(
         await supabase
           .from("sessions")
-          .select("id, camp_id, session_date, title, focus, notes, created_by")
+          .select("id, camp_id, session_date, title, focus, notes, duration_min, created_by")
           .eq("camp_id", campId!)
           .order("session_date", { ascending: false })
           .order("created_at", { ascending: false }),
@@ -180,12 +197,12 @@ export function useTrainingMutations(campId: string) {
   const inv = useInvalidate();
   return {
     addSession: useMutation({
-      mutationFn: async (s: { session_date: string; title: string; focus: string; notes: string }) =>
+      mutationFn: async (s: { session_date: string; title: string; focus: string; notes: string; duration_min?: number | null }) =>
         must(await supabase.from("sessions").insert({ camp_id: campId, ...s }).select("id").single()) as { id: string },
       onSuccess: () => inv("sessions"),
     }),
     updateSession: useMutation({
-      mutationFn: async ({ id, ...s }: { id: string; title: string; focus: string; notes: string }) =>
+      mutationFn: async ({ id, ...s }: { id: string; title: string; focus: string; notes: string; duration_min?: number | null }) =>
         must(await supabase.from("sessions").update(s).eq("id", id)),
       onSuccess: () => inv("sessions"),
     }),
@@ -346,5 +363,34 @@ export function useMarkActivityRead(campId: string) {
     mutationFn: async () =>
       must(await supabase.from("activity").update({ read_at: new Date().toISOString() }).eq("camp_id", campId).is("read_at", null)),
     onSuccess: () => inv("activity"),
+  });
+}
+
+// ───────── Wellness check-in ─────────
+
+/** Own rows for players; every row for staff (enforced by RLS). Last 28 days. */
+export const useWellness = (campId: string | undefined) =>
+  useQuery({
+    queryKey: ["wellness", campId],
+    enabled: !!campId,
+    queryFn: async () => {
+      const since = new Date(Date.now() - 28 * 864e5).toLocaleDateString("en-CA");
+      return must(
+        await supabase
+          .from("wellness")
+          .select("person_id, day, sleep, soreness, energy, mood, note")
+          .eq("camp_id", campId!)
+          .gte("day", since)
+          .order("day", { ascending: false }),
+      ) as Wellness[];
+    },
+  });
+
+export function useSaveWellness(campId: string) {
+  const inv = useInvalidate();
+  return useMutation({
+    mutationFn: async (w: Wellness) =>
+      must(await supabase.from("wellness").upsert({ camp_id: campId, ...w }, { onConflict: "camp_id,person_id,day" })),
+    onSuccess: () => inv("wellness"),
   });
 }

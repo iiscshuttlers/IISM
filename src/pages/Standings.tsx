@@ -4,6 +4,7 @@ import { useSession } from "../lib/session";
 import { useAssessments, useAttendance, useMatches, useMembers, useSessions, useStandings } from "../lib/api";
 import { Button, Card, Empty, Input, PageTitle, Segmented, cx } from "../components/ui";
 import { CATEGORIES } from "../lib/scores";
+import { confidence } from "../lib/insights";
 import { PlayerDetailSheet } from "../components/PlayerDetail";
 import { HeadToHeadModal } from "../components/HeadToHead";
 
@@ -56,7 +57,7 @@ export default function StandingsPage() {
       </div>
 
       <p className="text-xs text-ink-soft">
-        Camp-only rating: everyone starts at 1200 and confirmed camp matches move it. Disputed and void matches don't count.
+        Camp-only rating: everyone starts at 1200 and confirmed camp matches move it. Disputed and void matches don't count. The dot under each rating shows how settled it is (green = enough matches to trust it; red = needs more games).
       </p>
 
       {limited && (
@@ -133,7 +134,10 @@ export default function StandingsPage() {
                           .join(" · ") || "No matches"}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-right font-bold text-brand tabular-nums">{r.rating}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      <span className="font-bold text-brand">{r.rating}</span>
+                      <ConfidenceDot rd={r.glicko_rd} />
+                    </td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs">
                       <span className="font-semibold text-ink">{r.won}</span>
                       <span className="text-ink-soft"> / {r.played}</span>
@@ -199,5 +203,18 @@ export default function StandingsPage() {
         initialP1Id={compareP1}
       />
     </div>
+  );
+}
+
+function ConfidenceDot({ rd }: { rd: number | undefined }) {
+  if (rd === undefined) return null;
+  const c = confidence(rd);
+  const color = c.tone === "good" ? "bg-emerald-500" : c.tone === "warn" ? "bg-amber-500" : "bg-red-500";
+  return (
+    <span className="mt-0.5 flex items-center justify-end gap-1 text-[10px] font-medium text-ink-soft"
+      title={`Rating confidence: ${c.label} (Glicko-2 deviation ±${rd})`}>
+      <span className={cx("inline-block h-1.5 w-1.5 rounded-full", color)} aria-hidden />
+      {c.label}
+    </span>
   );
 }

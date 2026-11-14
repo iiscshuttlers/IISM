@@ -3,6 +3,7 @@ import { Sparkles, ArrowRight } from "lucide-react";
 import { Button, Card, Segmented, Sheet } from "./ui";
 import { CATEGORIES, isSingles, type Category } from "../lib/scores";
 import type { Member, Match, Standing } from "../lib/types";
+import { history, suggestionScore, timesMet } from "../lib/insights";
 
 interface SuggestedPairing {
   category: Category;
@@ -26,7 +27,8 @@ export function PairingHelperModal({
   const [open, setOpen] = useState(false);
   const [selectedCat, setSelectedCat] = useState<Category>("MS");
 
-  const ratingMap = useMemo(() => new Map(standings.map((s) => [s.person_id, s.rating])), [standings]);
+  const ratingMap = useMemo(() => new Map(standings.map((s) => [s.person_id, s.glicko ?? s.rating])), [standings]);
+  const hist = useMemo(() => history(matches), [matches]);
 
   // Count matches played per person in this category
   const playCounts = useMemo(() => {
@@ -49,7 +51,7 @@ export function PairingHelperModal({
     const eligibleMale = players.filter((p) => !p.gender || p.gender === "M");
     const eligibleFemale = players.filter((p) => !p.gender || p.gender === "F");
 
-    const getRating = (id: string) => ratingMap.get(id) ?? 1200;
+    const getRating = (id: string) => ratingMap.get(id) ?? 1500;
 
     const list: SuggestedPairing[] = [];
 
@@ -147,9 +149,20 @@ export function PairingHelperModal({
       }
     }
 
-    // Sort by rating difference and total played count
-    return list.sort((a, b) => a.ratingDiff - b.ratingDiff).slice(0, 4);
-  }, [selectedCat, players, matches, playCounts, ratingMap]);
+    // Rank by closeness, least court time and fresh match-ups (see lib/insights suggestionScore).
+    const ids = (t: Member[]) => t.map((p) => p.id);
+    return list
+      .map((p) => {
+        const met = timesMet(hist, ids(p.team1), ids(p.team2));
+        return {
+          ...p,
+          score: suggestionScore(hist, ids(p.team1), ids(p.team2), getRating),
+          reason: met === 0 ? `New match-up · ${p.reason}` : p.reason,
+        };
+      })
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 4);
+  }, [selectedCat, players, matches, playCounts, ratingMap, hist]);
 
   const handlePick = (pairing: SuggestedPairing) => {
     const singles = isSingles(pairing.category);
@@ -178,7 +191,7 @@ export function PairingHelperModal({
       <Sheet open={open} onClose={() => setOpen(false)} title="Pairing Suggester">
         <div className="space-y-4">
           <p className="text-xs text-ink-soft">
-            Suggests fair, varied match pairings based on player court time, category eligibility, and balanced Elo ratings.
+            Ranks match-ups that are close on rating, give court time to whoever has played least, and haven't been seen yet — each one tells the coaches something new.
           </p>
 
           <div>
@@ -224,7 +237,7 @@ export function PairingHelperModal({
                   </div>
 
                   <div className="mt-3 pt-2 border-t border-line flex items-center justify-between">
-                    <span className="text-xs text-ink-soft font-mono">Δ {s.ratingDiff} Elo</span>
+                    <span className="text-xs text-ink-soft font-mono">Δ {s.ratingDiff} rating</span>
                     <Button size="sm" onClick={() => handlePick(s)}>
                       <span>Record this</span>
                       <ArrowRight size={14} />

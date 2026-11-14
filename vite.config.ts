@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { VitePWA } from "vite-plugin-pwa";
 import { copyFileSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";
 
@@ -18,7 +19,50 @@ export default defineConfig({
   // GitHub Pages serves the site under /<repo>/; the deploy workflow sets BASE_PATH.
   base: process.env.BASE_PATH || "/",
   server: { port: 5199 },
-  plugins: [react(), tailwindcss(), spaFallback()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    VitePWA({
+      // A new version waits until the user taps "Refresh" (no reload mid-match entry).
+      registerType: "prompt",
+      injectRegister: false,
+      includeAssets: ["favicon.ico", "icon.svg", "apple-touch-icon-180x180.png"],
+      manifest: {
+        id: "./",
+        name: "IISc Training Camp",
+        short_name: "Training Camp",
+        description: "Practice matches, training log and squad selection for the IISc badminton selection camp.",
+        start_url: "./",
+        scope: "./",
+        display: "standalone",
+        orientation: "portrait",
+        background_color: "#0f766e",
+        theme_color: "#0f766e",
+        categories: ["sports"],
+        icons: [
+          { src: "pwa-64x64.png", sizes: "64x64", type: "image/png" },
+          { src: "pwa-192x192.png", sizes: "192x192", type: "image/png" },
+          { src: "pwa-512x512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "maskable-icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+        ],
+        shortcuts: [
+          { name: "Record a match", short_name: "Record", url: "./matches?new=1" },
+          { name: "Standings", url: "./standings" },
+          { name: "Training", url: "./training" },
+        ],
+      },
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,webmanifest}"],
+        // App routes open offline from the cached shell; the static privacy page is its own file.
+        navigateFallback: "index.html",
+        navigateFallbackDenylist: [/privacy\.html$/],
+        cleanupOutdatedCaches: true,
+        // Supabase API calls are never cached by the service worker.
+      },
+      devOptions: { enabled: false },
+    }),
+    spaFallback(),
+  ],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   test: { environment: "node" },
 });

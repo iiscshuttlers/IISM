@@ -1,4 +1,4 @@
-import { Share2 } from "lucide-react";
+import { Repeat, Share2 } from "lucide-react";
 import { Badge, Button, cx, fmtDate } from "./ui";
 import { CATEGORIES, isSingles } from "../lib/scores";
 import { shareMatchOnWhatsApp } from "../lib/whatsappShare";
@@ -7,7 +7,7 @@ import type { Match, Member } from "../lib/types";
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const withinDay = (m: Match) => Date.now() - new Date(m.created_at).getTime() < DAY_MS;
 
-export function MatchCard({ match: m, people, meId, isStaff, onEdit, onDispute, onResolve }: {
+export function MatchCard({ match: m, people, meId, isStaff, onEdit, onDispute, onResolve, onRematch }: {
   match: Match;
   people: Member[];
   meId: string | null | undefined;
@@ -15,6 +15,8 @@ export function MatchCard({ match: m, people, meId, isStaff, onEdit, onDispute, 
   onEdit?: (m: Match) => void;
   onDispute?: (m: Match) => void;
   onResolve?: (m: Match) => void;
+  /** Opens the record form with the same players and category. */
+  onRematch?: (m: Match) => void;
 }) {
   const name = (id: string | null) => people.find((p) => p.id === id)?.full_name ?? "Former player";
   const side = (a: string, b: string | null) => (isSingles(m.category) ? name(a) : `${name(a)} & ${name(b)}`);
@@ -67,6 +69,11 @@ export function MatchCard({ match: m, people, meId, isStaff, onEdit, onDispute, 
         <div className="flex flex-wrap gap-2">
           {canEdit && m.status !== "void" && onEdit && <Button size="sm" variant="secondary" onClick={() => onEdit(m)}>Edit</Button>}
           {canDispute && onDispute && <Button size="sm" variant="secondary" onClick={() => onDispute(m)}>Dispute</Button>}
+          {onRematch && m.status !== "void" && (
+            <Button size="sm" variant="ghost" onClick={() => onRematch(m)} aria-label="Rematch: record another game with the same players">
+              <Repeat size={13} /> Rematch
+            </Button>
+          )}
           {isStaff && onResolve && (
             <Button size="sm" variant="ghost" onClick={() => onResolve(m)}>
               {m.status === "disputed" ? "Resolve" : m.status === "void" ? "Restore" : "Void"}

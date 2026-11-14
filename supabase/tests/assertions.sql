@@ -473,4 +473,99 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- 14. (0003) Offline retries are idempotent; a client id can't be hijacked.
+SELECT pg_temp.as_user(:u_p1, 'p1@x.test');
+INSERT INTO ids SELECT 'off1', public.record_match((SELECT v FROM ids WHERE k='camp'), NULL, 'MS',
+  (SELECT v FROM ids WHERE k='p1'), NULL, (SELECT v FROM ids WHERE k='p2'), NULL, '{21-10,21-12}', 1::smallint,
+  'cccccccc-0000-0000-0000-000000000001');
+DO $$ BEGIN
+  IF public.record_match((SELECT v FROM ids WHERE k='camp'), NULL, 'MS',
+       (SELECT v FROM ids WHERE k='p1'), NULL, (SELECT v FROM ids WHERE k='p2'), NULL, '{21-10,21-12}', 1::smallint,
+       'cccccccc-0000-0000-0000-000000000001') IS DISTINCT FROM (SELECT v FROM ids WHERE k='off1') THEN
+    RAISE EXCEPTION 'retry returned a different match';
+  END IF;
+  IF (SELECT count(*) FROM public.matches WHERE client_id = 'cccccccc-0000-0000-0000-000000000001') <> 1 THEN
+    RAISE EXCEPTION 'retry duplicated the match';
+  END IF;
+END $$;
+SELECT pg_temp.as_user(:u_p2, 'p2@x.test');
+DO $$ BEGIN
+  IF (SELECT count(*) FROM public.activity WHERE match_id = (SELECT v FROM ids WHERE k='off1')) <> 1 THEN
+    RAISE EXCEPTION 'retry should notify once';
+  END IF;
+  BEGIN
+    PERFORM public.record_match((SELECT v FROM ids WHERE k='camp'), NULL, 'MS',
+      (SELECT v FROM ids WHERE k='p2'), NULL, (SELECT v FROM ids WHERE k='p5'), NULL, NULL, 1::smallint,
+      'cccccccc-0000-0000-0000-000000000001');
+    RAISE EXCEPTION 'reused someone else''s client id';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+SELECT public.resolve_match((SELECT v FROM ids WHERE k='off1'), 'void', NULL, 1::smallint);
+
+-- 15. (0003) Glicko-2 on a fresh camp matches src/lib/glicko2.ts exactly.
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+INSERT INTO ids SELECT 'gcamp', public.create_camp('Glicko', NULL, NULL, 2);
+INSERT INTO ids SELECT 'g1', public.add_camp_person((SELECT v FROM ids WHERE k='gcamp'), 'G1', 'M', NULL, 'player');
+INSERT INTO ids SELECT 'g2', public.add_camp_person((SELECT v FROM ids WHERE k='gcamp'), 'G2', 'M', NULL, 'player');
+INSERT INTO ids SELECT 'g3', public.add_camp_person((SELECT v FROM ids WHERE k='gcamp'), 'G3', 'F', NULL, 'player');
+INSERT INTO ids SELECT 'g4', public.add_camp_person((SELECT v FROM ids WHERE k='gcamp'), 'G4', 'F', NULL, 'player');
+SELECT public.record_match((SELECT v FROM ids WHERE k='gcamp'), '2026-11-16', 'MS',
+  (SELECT v FROM ids WHERE k='g1'), NULL, (SELECT v FROM ids WHERE k='g2'), NULL, NULL, 1::smallint);
+SELECT public.record_match((SELECT v FROM ids WHERE k='gcamp'), '2026-11-17', 'XD',
+  (SELECT v FROM ids WHERE k='g1'), (SELECT v FROM ids WHERE k='g3'),
+  (SELECT v FROM ids WHERE k='g2'), (SELECT v FROM ids WHERE k='g4'), NULL, 2::smallint);
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN SELECT i.k, s.glicko, s.glicko_rd FROM public.get_standings((SELECT v FROM ids WHERE k='gcamp')) s
+             JOIN ids i ON i.v = s.person_id LOOP
+    IF (r.k, r.glicko, r.glicko_rd) NOT IN (('g1', 1468, 258), ('g2', 1532, 258), ('g3', 1307, 287), ('g4', 1693, 287)) THEN
+      RAISE EXCEPTION 'glicko mismatch: % % %', r.k, r.glicko, r.glicko_rd;
+    END IF;
+  END LOOP;
+  IF (SELECT count(*) FROM public.get_standings((SELECT v FROM ids WHERE k='gcamp'))) <> 4 THEN
+    RAISE EXCEPTION 'glicko camp size';
+  END IF;
+END $$;
+
+-- 16. (0003) Wellness: own rows only for players; staff read all.
+SELECT pg_temp.as_user(:u_p1, 'p1@x.test');
+INSERT INTO public.wellness (camp_id, person_id, sleep, soreness, energy, mood)
+VALUES ((SELECT v FROM ids WHERE k='camp'), (SELECT v FROM ids WHERE k='p1'), 4, 2, 4, 5);
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO public.wellness (camp_id, person_id, sleep, soreness, energy, mood)
+    VALUES ((SELECT v FROM ids WHERE k='camp'), (SELECT v FROM ids WHERE k='p2'), 1, 5, 1, 1);
+    RAISE EXCEPTION 'player wrote someone else''s wellness';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  UPDATE public.wellness SET person_id = (SELECT v FROM ids WHERE k='p2'), sleep = 3;
+  IF (SELECT person_id FROM public.wellness) <> (SELECT v FROM ids WHERE k='p1') THEN
+    RAISE EXCEPTION 'wellness owner changed';
+  END IF;
+  IF (SELECT sleep FROM public.wellness) <> 3 THEN RAISE EXCEPTION 'own wellness not editable'; END IF;
+END $$;
+SELECT pg_temp.as_user(:u_p2, 'p2@x.test');
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM public.wellness) THEN RAISE EXCEPTION 'player read another''s wellness'; END IF;
+  UPDATE public.wellness SET sleep = 1;
+  DELETE FROM public.wellness;
+END $$;
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+DO $$ BEGIN
+  IF (SELECT sleep FROM public.wellness) <> 3 THEN RAISE EXCEPTION 'coach cannot read wellness, or p2 changed it'; END IF;
+  BEGIN UPDATE public.wellness SET sleep = 1; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF (SELECT sleep FROM public.wellness) <> 3 THEN RAISE EXCEPTION 'coach edited a player''s wellness'; END IF;
+END $$;
+SELECT pg_temp.as_user(NULL, NULL);
+DO $$ BEGIN
+  BEGIN PERFORM 1 FROM public.wellness; RAISE EXCEPTION 'anon read wellness';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM public._glicko2_update(1500, 350, 0.06, 1500, 350, 1); RAISE EXCEPTION 'anon called glicko helper';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+
 SELECT 'ALL TRAINING CAMP ASSERTIONS PASSED' AS result;

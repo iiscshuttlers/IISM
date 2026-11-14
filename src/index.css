@@ -40,3 +40,22 @@ body {
   font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Outdoor mode: maximum contrast and larger touch targets for bright courts and sweaty hands. */
+:root[data-outdoor] {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #eef0ef;
+  --line: #1f2925;
+  --ink: #000000;
+  --ink-soft: #1f2925;
+  --color-brand: #0b5c55;
+  color-scheme: light;
+}
+:root[data-outdoor] body { font-size: 17px; font-weight: 500; }
+:root[data-outdoor] button,
+:root[data-outdoor] select,
+:root[data-outdoor] input { min-height: 44px; }
+:root[data-outdoor] .text-xs { font-size: 0.8125rem; }
+:root[data-outdoor] .text-\[11px\],
+:root[data-outdoor] .text-\[10px\] { font-size: 0.75rem; }

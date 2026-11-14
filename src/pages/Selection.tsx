@@ -102,6 +102,7 @@ export default function SelectionPage() {
             {locked
               ? <Badge tone="good">Locked {fmtDate(camp.selection_locked_at!.slice(0, 10))}{camp.publish_selection ? " · published" : " · not published"}</Badge>
               : <Badge>Draft — only staff can see this</Badge>}
+            <Link href="/insights" className="text-xs font-semibold text-brand hover:underline">Compare &amp; insights</Link>
             {s.isAdmin && locked && !camp.publish_selection && (
               <Link href="/settings" className="text-xs font-semibold text-brand hover:underline">Publish to players</Link>
             )}

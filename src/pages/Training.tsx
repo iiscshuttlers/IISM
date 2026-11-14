@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { useSession } from "../lib/session";
 import { useAttendance, useDrills, useMembers, useSessions, useTrainingMutations } from "../lib/api";
 import { errorText } from "../lib/supabase";
-import { Badge, Button, Card, Empty, Field, Input, PageTitle, Select, Sheet, Textarea, cx, fmtDate, today } from "../components/ui";
+import { Badge, Button, Card, ConfirmDialog, Empty, Field, Input, PageTitle, Select, Sheet, Textarea, cx, fmtDate, today } from "../components/ui";
 import { DrillTemplatesSheet, type DrillTemplate } from "../components/DrillTemplates";
 import { DrillTimerModal } from "../components/DrillTimer";
 import { TacticalBoardModal } from "../components/TacticalBoard";
@@ -121,7 +121,7 @@ export default function TrainingPage() {
 }
 
 function SessionForm({ onSubmit, busy, initial }: {
-  onSubmit: (v: { session_date: string; title: string; focus: string; notes: string }) => void;
+  onSubmit: (v: { session_date: string; title: string; focus: string; notes: string; duration_min: number | null }) => void;
   busy: boolean;
   initial?: Session;
 }) {
@@ -130,13 +130,20 @@ function SessionForm({ onSubmit, busy, initial }: {
     title: initial?.title ?? "Morning session",
     focus: initial?.focus ?? "",
     notes: initial?.notes ?? "",
+    duration: initial?.duration_min ? String(initial.duration_min) : "",
   });
+  const { duration, ...rest } = v;
+  const minutes = duration.trim() ? Math.min(600, Math.max(1, Math.round(Number(duration)))) : null;
   return (
-    <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); onSubmit(v); }}>
+    <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); onSubmit({ ...rest, duration_min: Number.isFinite(minutes) ? minutes : null }); }}>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Date"><Input type="date" required value={v.session_date} disabled={!!initial} onChange={(e) => setV({ ...v, session_date: e.target.value })} /></Field>
         <Field label="Title"><Input required maxLength={80} value={v.title} onChange={(e) => setV({ ...v, title: e.target.value })} /></Field>
       </div>
+      <Field label="Duration (minutes)" hint="Used for training load: effort (RPE) × minutes.">
+        <Input type="number" inputMode="numeric" min={1} max={600} value={v.duration} placeholder="e.g. 90"
+          onChange={(e) => setV({ ...v, duration: e.target.value })} />
+      </Field>
       <Field label="Focus"><Input maxLength={200} value={v.focus} placeholder="e.g. Rear-court footwork, net kills" onChange={(e) => setV({ ...v, focus: e.target.value })} /></Field>
       <Field label="Notes"><Textarea maxLength={2000} value={v.notes} onChange={(e) => setV({ ...v, notes: e.target.value })} /></Field>
       <Button type="submit" className="w-full" disabled={busy}>{initial ? "Save" : "Create session"}</Button>
@@ -160,6 +167,7 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
   const [drill, setDrill] = useState({ drill_name: "", drill_type: "footwork" as DrillType, duration_min: "", sets: "", reps: "", intensity: "3", notes: "" });
   const [editing, setEditing] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const num = (x: string) => (x.trim() ? Number(x) : null);
   const onErr = (e: unknown) => toast.error(errorText(e));
 
@@ -203,7 +211,7 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
     <div className="space-y-5">
       {editing ? (
         <SessionForm initial={session} busy={mut.updateSession.isPending}
-          onSubmit={(v) => mut.updateSession.mutate({ id: session.id, title: v.title, focus: v.focus, notes: v.notes }, {
+          onSubmit={(v) => mut.updateSession.mutate({ id: session.id, title: v.title, focus: v.focus, notes: v.notes, duration_min: v.duration_min }, {
             onSuccess: () => setEditing(false), onError: onErr,
           })} />
       ) : (
@@ -213,11 +221,9 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
           <div className="mt-2 flex gap-2">
             <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>Edit details</Button>
             {canDelete && (
-              <Button size="sm" variant="ghost" onClick={() => {
-                if (confirm("Delete this session with its drills and attendance?")) {
-                  mut.deleteSession.mutate(session.id, { onSuccess: onDeleted, onError: onErr });
-                }
-              }}>Delete session</Button>
+              <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-700" onClick={() => setConfirmDelete(true)}>
+                Delete session
+              </Button>
             )}
           </div>
         </div>
@@ -323,6 +329,20 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
         open={showTemplates}
         onClose={() => setShowTemplates(false)}
         onSelect={handleSelectTemplate}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete training session?"
+        message="This will permanently delete this training session along with all logged drills and player attendance records."
+        confirmLabel="Delete session"
+        cancelLabel="Cancel"
+        tone="danger"
+        onConfirm={() => {
+          setConfirmDelete(false);
+          mut.deleteSession.mutate(session.id, { onSuccess: onDeleted, onError: onErr });
+        }}
+        onCancel={() => setConfirmDelete(false)}
       />
     </div>
   );

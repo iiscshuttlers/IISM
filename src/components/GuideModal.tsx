@@ -45,6 +45,7 @@ export function GuideButton({ variant = "ghost" }: { variant?: "ghost" | "second
             <ul className="list-disc pl-5 space-y-1 text-xs text-ink-soft">
               <li>Everyone begins at <strong className="text-ink">1200 rating</strong> points with $K=32$.</li>
               <li>Doubles matches use the average rating of each pair to compute expected win probability.</li>
+              <li>Each rating shows a <strong className="text-ink">confidence</strong> dot (Glicko-2): red means too few matches to trust the number yet, green means it has settled. Coaches see the full strength range under Insights → Compare.</li>
               <li>Rankings factor in rating, total wins, point differentials, and recent 5-match form (<span className="text-emerald-600 font-bold">W</span> / <span className="text-red-500 font-bold">L</span>).</li>
             </ul>
           </section>

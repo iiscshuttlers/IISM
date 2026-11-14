@@ -67,6 +67,9 @@ export interface Standing {
   points_against: number;
   form: string;
   by_category: Record<string, { w: number; l: number }>;
+  /** Glicko-2 rating (starts 1500) and its deviation; ±2·RD is a ~95% range. */
+  glicko: number;
+  glicko_rd: number;
 }
 
 export interface Session {
@@ -76,7 +79,18 @@ export interface Session {
   title: string;
   focus: string | null;
   notes: string | null;
+  duration_min: number | null;
   created_by: string | null;
+}
+
+export interface Wellness {
+  person_id: string;
+  day: string;
+  sleep: number;
+  soreness: number;
+  energy: number;
+  mood: number;
+  note: string | null;
 }
 
 export const DRILL_TYPES = [

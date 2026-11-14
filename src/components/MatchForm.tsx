@@ -8,7 +8,9 @@ import { errorText } from "../lib/supabase";
 
 const emptyRows = () => [{ a: "", b: "" }, { a: "", b: "" }, { a: "", b: "" }];
 
-export function MatchForm({ players, initial, submitLabel, onSubmit, busy, lockPlayers = false, initialCategory, initialSlots }: {
+export interface Lineup { category: Category; slots: (string | null)[] }
+
+export function MatchForm({ players, initial, submitLabel, onSubmit, busy, lockPlayers = false, initialCategory, initialSlots, recent = [] }: {
   players: Member[];
   initial?: Match;
   submitLabel: string;
@@ -18,6 +20,8 @@ export function MatchForm({ players, initial, submitLabel, onSubmit, busy, lockP
   lockPlayers?: boolean;
   initialCategory?: Category;
   initialSlots?: (string | null)[];
+  /** Recent line-ups offered as one-tap chips on a fresh form. */
+  recent?: Lineup[];
 }) {
   const [category, setCategory] = useState<Category>(initial?.category ?? initialCategory ?? "MS");
   const [playedOn, setPlayedOn] = useState(initial?.played_on ?? today());
@@ -94,6 +98,26 @@ export function MatchForm({ players, initial, submitLabel, onSubmit, busy, lockP
         </Field>
         <Field label="Date"><Input type="date" value={playedOn} max={today()} disabled={lockPlayers} onChange={(e) => setPlayedOn(e.target.value)} /></Field>
       </div>
+
+      {!initial && !lockPlayers && recent.length > 0 && (
+        <div>
+          <p className="mb-1 text-xs font-semibold text-ink-soft">Recent line-ups</p>
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            {recent.map((l, i) => {
+              const nm = (id: string | null) => players.find((p) => p.id === id)?.full_name.split(" ")[0] ?? "?";
+              const label = isSingles(l.category)
+                ? `${nm(l.slots[0])} v ${nm(l.slots[2])}`
+                : `${nm(l.slots[0])}/${nm(l.slots[1])} v ${nm(l.slots[2])}/${nm(l.slots[3])}`;
+              return (
+                <button key={i} type="button" onClick={() => { setCategory(l.category); setSlots([...l.slots]); }}
+                  className="shrink-0 rounded-full border border-line bg-surface-2 px-2.5 py-1 text-[11px] font-medium text-ink hover:border-brand/50">
+                  <span className="mr-1 font-bold text-brand">{l.category}</span>{label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">

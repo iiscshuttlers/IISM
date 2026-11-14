@@ -4,7 +4,9 @@ import { toast } from "sonner";
 import { useSession } from "../lib/session";
 import { useMatchMutations, useMatches, useMembers, useStandings } from "../lib/api";
 import { errorText } from "../lib/supabase";
-import { MatchForm } from "../components/MatchForm";
+import { MatchForm, type Lineup } from "../components/MatchForm";
+import { outbox, useOutbox } from "../lib/outbox";
+import { CloudOff } from "lucide-react";
 import { MatchCard } from "../components/MatchCard";
 import { PairingHelperModal } from "../components/PairingHelper";
 import { LiveCourtScorer } from "../components/LiveCourtScorer";
@@ -32,10 +34,36 @@ export default function MatchesPage() {
   const [resolving, setResolving] = useState<Match | null>(null);
   const [reason, setReason] = useState("");
 
-  // ?new=1 opens the record sheet (used by the Today page).
+  // ?new=1 opens the record sheet (Today page, app shortcut); &cat=&slots= pre-fills it.
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("new") === "1") setRecording(true);
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("new") !== "1") return;
+    const cat = q.get("cat") as Category | null;
+    const slots = q.get("slots")?.split(",").map((x) => x || null);
+    if (cat && slots?.length === 4) setPrefill({ category: cat, slots });
+    setRecording(true);
   }, []);
+  const pending = useOutbox(campId);
+  const recentLineups = useMemo<Lineup[]>(() => {
+    const seen = new Set<string>();
+    const out: Lineup[] = [];
+    for (const m of matches.data ?? []) {
+      if (m.status === "void") continue;
+      const slots = [m.t1_p1, m.t1_p2, m.t2_p1, m.t2_p2];
+      const k = `${m.category}:${slots.join(",")}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push({ category: m.category, slots });
+      if (out.length === 5) break;
+    }
+    return out;
+  }, [matches.data]);
+  const rematch = (m: Match) => {
+    setPrefill({ category: m.category, slots: [m.t1_p1, m.t1_p2, m.t2_p1, m.t2_p2] });
+    setRecording(true);
+  };
+  const savedToast = (r: { queued: boolean }) =>
+    r.queued ? toast.success("No signal: saved on this phone. It will send automatically.") : toast.success("Match recorded");
 
   const people = members.data ?? [];
   const players = people.filter((p) => p.role === "player");
@@ -156,6 +184,32 @@ export default function MatchesPage() {
         </div>
       </div>
 
+      {pending.length > 0 && (
+        <div className="mb-3 space-y-2">
+          {pending.map((p) => {
+            const nm = (id: string | null) => people.find((x) => x.id === id)?.full_name ?? "?";
+            const sides = p.input.slots[1]
+              ? `${nm(p.input.slots[0])} & ${nm(p.input.slots[1])} v ${nm(p.input.slots[2])} & ${nm(p.input.slots[3])}`
+              : `${nm(p.input.slots[0])} v ${nm(p.input.slots[2])}`;
+            return (
+              <div key={p.clientId} className="rounded-xl border border-dashed border-amber-400 bg-amber-50 p-3 text-sm dark:bg-amber-900/20">
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-900 dark:text-amber-200">
+                  <CloudOff size={13} /> {p.error ? "Couldn't save" : "Waiting to send"} · {p.input.category}
+                </p>
+                <p className="mt-1 text-ink">{sides}</p>
+                {p.error && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="flex-1 text-xs text-red-600">{errorText({ message: p.error })}</span>
+                    <Button size="sm" variant="secondary" onClick={() => outbox.retry(p.clientId)}>Retry</Button>
+                    <Button size="sm" variant="ghost" onClick={() => outbox.remove(p.clientId)}>Discard</Button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {matches.isLoading ? (
         <p className="text-sm text-ink-soft">Loading…</p>
       ) : list.length === 0 ? (
@@ -164,7 +218,8 @@ export default function MatchesPage() {
         <div className="space-y-2">
           {list.map((m) => (
             <MatchCard key={m.id} match={m} people={people} meId={s.meId} isStaff={s.isStaff}
-              onEdit={setEditing} onDispute={(x) => { setReason(""); setDisputing(x); }} onResolve={setResolving} />
+              onEdit={setEditing} onDispute={(x) => { setReason(""); setDisputing(x); }} onResolve={setResolving}
+              onRematch={players.length >= 2 ? rematch : undefined} />
           ))}
         </div>
       )}
@@ -178,11 +233,11 @@ export default function MatchesPage() {
             players={players}
             initialCategory={prefill?.category}
             initialSlots={prefill?.slots}
+            recent={recentLineups}
             submitLabel="Save match"
             busy={mut.record.isPending}
             onSubmit={async (m) => {
-              await mut.record.mutateAsync(m);
-              toast.success("Match recorded");
+              savedToast(await mut.record.mutateAsync(m));
               setRecording(false);
               setPrefill(null);
             }}
@@ -248,7 +303,8 @@ export default function MatchesPage() {
         onClose={() => setLiveScoring(false)}
         players={players}
         onSaveMatch={async (m) => {
-          await mut.record.mutateAsync(m);
+          const r = await mut.record.mutateAsync(m);
+          if (r.queued) toast.success("No signal: saved on this phone. It will send automatically.");
         }}
         busy={mut.record.isPending}
       />
