@@ -104,7 +104,12 @@ export default function StandingsPage() {
                 <th className="px-3 py-2 text-left">Player</th>
                 <th className="px-3 py-2 text-right">Rating</th>
                 <th className="px-3 py-2 text-right">W–L</th>
-                <th className="px-3 py-2 text-right">Pts ±</th>
+                <th
+                  className="px-3 py-2 text-right"
+                  title="Net rally points: points scored minus points conceded in matches"
+                >
+                  Rally ±
+                </th>
                 <th className="px-3 py-2 text-left">Form</th>
               </tr>
             </thead>
@@ -174,6 +179,11 @@ export default function StandingsPage() {
               })}
             </tbody>
           </table>
+          <div className="p-2.5 bg-surface-2/60 border-t border-line text-[11px] text-ink-soft flex flex-wrap items-center justify-between gap-2">
+            <span><strong>Rating:</strong> Elo skill score (starts at 1200)</span>
+            <span><strong>W–L:</strong> Matches won / played</span>
+            <span><strong>Rally ±:</strong> Game points scored minus conceded (+42 / -42)</span>
+          </div>
         </Card>
       )}
 

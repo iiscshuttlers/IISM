@@ -9,6 +9,8 @@ interface SuggestedPairing {
   category: Category;
   team1: Member[];
   team2: Member[];
+  team1Rating: number;
+  team2Rating: number;
   ratingDiff: number;
   reason: string;
 }
@@ -75,6 +77,8 @@ export function PairingHelperModal({
             category: selectedCat,
             team1: [p1],
             team2: [p2],
+            team1Rating: r1,
+            team2Rating: r2,
             ratingDiff: diff,
             reason:
               totalPlayed === 0
@@ -108,6 +112,8 @@ export function PairingHelperModal({
                 category: selectedCat,
                 team1: [t1_m, t1_f],
                 team2: [t2_m, t2_f],
+                team1Rating: Math.round(t1Avg),
+                team2Rating: Math.round(t2Avg),
                 ratingDiff: diff,
                 reason: diff <= 25 ? `Evenly matched mixed pair (${diff} pts diff)` : "Balanced playtime",
               });
@@ -140,6 +146,8 @@ export function PairingHelperModal({
                 category: selectedCat,
                 team1: [pA, pD],
                 team2: [pB, pC],
+                team1Rating: Math.round(t1Avg),
+                team2Rating: Math.round(t2Avg),
                 ratingDiff: diff,
                 reason: diff <= 30 ? `Closest doubles balance (${diff} pts)` : "Least matches played",
               });
@@ -237,7 +245,9 @@ export function PairingHelperModal({
                   </div>
 
                   <div className="mt-3 pt-2 border-t border-line flex items-center justify-between">
-                    <span className="text-xs text-ink-soft font-mono">Δ {s.ratingDiff} rating</span>
+                    <span className="text-xs text-ink-soft font-mono">
+                      Rating gap: <strong>{s.ratingDiff} Elo</strong> ({s.team1Rating} vs {s.team2Rating})
+                    </span>
                     <Button size="sm" onClick={() => handlePick(s)}>
                       <span>Record this</span>
                       <ArrowRight size={14} />
