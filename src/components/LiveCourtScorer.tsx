@@ -21,6 +21,8 @@ export function LiveCourtScorer({
 }) {
   const [step, setStep] = useState<"setup" | "scoring" | "finished">("setup");
   const [category, setCategory] = useState<Category>("MS");
+  const [targetPoints, setTargetPoints] = useState<number>(21);
+  const [matchFormat, setMatchFormat] = useState<"best_of_3" | "1_set">("best_of_3");
   const [slots, setSlots] = useState<(string | null)[]>([null, null, null, null]);
 
   // Scoring state
@@ -31,6 +33,17 @@ export function LiveCourtScorer({
   const [winsA, setWinsA] = useState(0);
   const [winsB, setWinsB] = useState(0);
   const [scoreLog, setScoreLog] = useState<{ a: number; b: number }[]>([]);
+
+  const setsToWin = matchFormat === "1_set" ? 1 : 2;
+  const deuceAt = targetPoints - 1;
+  const cap =
+    targetPoints === 21
+      ? 30
+      : targetPoints === 15
+      ? 21
+      : targetPoints === 11
+      ? 15
+      : targetPoints + 5;
 
   const singles = isSingles(category);
   const want = slotGenders(category);
@@ -67,13 +80,12 @@ export function LiveCourtScorer({
     setScoreA(nextA);
     setScoreB(nextB);
 
-    // Badminton win condition:
-    // First to 21 with lead of 2, or first to 30.
+    // Win condition for current game
     const isGameWon =
-      (nextA >= 21 && nextA - nextB >= 2) ||
-      nextA === 30 ||
-      (nextB >= 21 && nextB - nextA >= 2) ||
-      nextB === 30;
+      (nextA >= targetPoints && nextA - nextB >= 2) ||
+      nextA >= cap ||
+      (nextB >= targetPoints && nextB - nextA >= 2) ||
+      nextB >= cap;
 
     if (isGameWon) {
       const winnerSide = nextA > nextB ? "A" : "B";
@@ -87,14 +99,14 @@ export function LiveCourtScorer({
       setWinsB(nextWinsB);
 
       toast.success(
-        `Game ${currentGame} won by ${winnerSide === "A" ? team1Name : team2Name} (${finalGameScore})`
+        `Set ${currentGame} won by ${winnerSide === "A" ? team1Name : team2Name} (${finalGameScore})`
       );
 
-      // Best of 3 check (2 games to win)
-      if (nextWinsA === 2 || nextWinsB === 2) {
+      // Check if match won
+      if (nextWinsA === setsToWin || nextWinsB === setsToWin) {
         setStep("finished");
       } else {
-        // Next game
+        // Next set
         setCurrentGame((g) => g + 1);
         setScoreA(0);
         setScoreB(0);
@@ -138,19 +150,43 @@ export function LiveCourtScorer({
               Real-time courtside scoreboard. Track points as rallies happen with automatic deuce and game win detection.
             </p>
 
-            <Field label="Category">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Category">
+                <Select
+                  value={category}
+                  onChange={(e) => {
+                    setCategory(e.target.value as Category);
+                    setSlots([null, null, null, null]);
+                  }}
+                >
+                  {CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+
+              <Field label="Match format">
+                <Select
+                  value={matchFormat}
+                  onChange={(e) => setMatchFormat(e.target.value as "best_of_3" | "1_set")}
+                >
+                  <option value="best_of_3">Best of 3 Sets</option>
+                  <option value="1_set">1 Set (Single Shootout)</option>
+                </Select>
+              </Field>
+            </div>
+
+            <Field label="Points per set">
               <Select
-                value={category}
-                onChange={(e) => {
-                  setCategory(e.target.value as Category);
-                  setSlots([null, null, null, null]);
-                }}
+                value={targetPoints}
+                onChange={(e) => setTargetPoints(Number(e.target.value))}
               >
-                {CATEGORIES.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
+                <option value={21}>21 Points (Standard BWF · Deuce to 30)</option>
+                <option value={15}>15 Points (Training Camp / Fast · Deuce to 21)</option>
+                <option value={11}>11 Points (King of the Court · Deuce to 15)</option>
+                <option value={30}>30 Points (Single Game Marathon)</option>
               </Select>
             </Field>
 
@@ -236,114 +272,141 @@ export function LiveCourtScorer({
           </div>
         )}
 
-        {step === "scoring" && (
-          <div className="space-y-4">
-            {/* Game Status Header */}
-            <div className="flex items-center justify-between text-xs px-2 py-1 bg-surface-2 rounded-lg">
-              <span className="font-bold text-brand uppercase">
-                {category} · Game {currentGame}
-              </span>
-              <span className="font-mono text-ink-soft">
-                Games: {winsA} – {winsB}
-              </span>
-              {gamesHistory.length > 0 && (
-                <span className="text-ink-soft">({gamesHistory.join(", ")})</span>
-              )}
-            </div>
+        {step === "scoring" && (() => {
+          const isDeuce = scoreA >= deuceAt && scoreB >= deuceAt && scoreA === scoreB;
+          const isGamePointA = scoreA >= deuceAt && scoreA > scoreB;
+          const isGamePointB = scoreB >= deuceAt && scoreB > scoreA;
+          const isMatchPoint =
+            (isGamePointA && winsA === setsToWin - 1) ||
+            (isGamePointB && winsB === setsToWin - 1);
+          const isGamePoint = isGamePointA || isGamePointB;
+          const hasBanner = isDeuce || isGamePointA || isGamePointB;
 
-            {/* Visual Badminton Court Scoreboard */}
-            <div className="rounded-xl overflow-hidden border-2 border-emerald-700 bg-emerald-800 shadow-md text-white p-4">
-              {/* Game Point / Match Point Banner */}
-              {(scoreA >= 20 || scoreB >= 20) && (
-                <div className="mb-3 text-center">
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-amber-400 text-amber-950 uppercase tracking-wider shadow animate-pulse">
-                    {scoreA === scoreB
-                      ? "⚡ DEUCE (Must win by 2, max 30)"
-                      : (winsA === 1 && scoreA > scoreB) || (winsB === 1 && scoreB > scoreA)
-                      ? "🏆 MATCH POINT"
-                      : "🔥 GAME POINT"}
-                  </span>
+          return (
+            <div className="space-y-4">
+              {/* Game Status Header */}
+              <div className="flex items-center justify-between text-xs px-2.5 py-1.5 bg-surface-2 rounded-lg">
+                <span className="font-bold text-brand uppercase">
+                  {category} · {matchFormat === "1_set" ? "1 Set Shootout" : `Set ${currentGame} of 3`} ({targetPoints} pts)
+                </span>
+                <span className="font-mono text-ink-soft">
+                  Sets: {winsA} – {winsB}
+                </span>
+                {gamesHistory.length > 0 && (
+                  <span className="text-ink-soft font-mono">({gamesHistory.join(", ")})</span>
+                )}
+              </div>
+
+              {/* Visual Badminton Court Scoreboard */}
+              <div className="rounded-xl overflow-hidden border-2 border-emerald-700 bg-emerald-800 shadow-md text-white p-4">
+                {/* Game Point / Match Point Banner */}
+                {hasBanner && (
+                  <div className="mb-3 text-center">
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-amber-400 text-amber-950 uppercase tracking-wider shadow animate-pulse">
+                      {isDeuce
+                        ? `⚡ DEUCE (Must win by 2, sudden death at ${cap})`
+                        : isMatchPoint
+                        ? "🏆 MATCH POINT"
+                        : isGamePoint
+                        ? "🔥 SET POINT"
+                        : ""}
+                    </span>
+                  </div>
+                )}
+
+                {/* Court with Vertical Net Divider */}
+                <div className="relative grid grid-cols-2 gap-6 items-center">
+                  {/* Vertical Net Divider */}
+                  <div className="absolute left-1/2 top-0 bottom-0 -translate-x-1/2 flex flex-col items-center justify-center pointer-events-none z-10">
+                    <div className="w-px h-full border-r-2 border-dashed border-emerald-300/40" />
+                    <span className="absolute bg-emerald-900 border border-emerald-500/50 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest text-emerald-200 shadow">
+                      NET
+                    </span>
+                  </div>
+
+                  {/* Team A Side */}
+                  <div className="text-center space-y-2 z-0">
+                    <p className="font-bold text-sm truncate px-1 text-emerald-100">{team1Name}</p>
+                    <button
+                      type="button"
+                      onClick={() => addPoint("A")}
+                      title="Tap to add point"
+                      className="w-full text-6xl font-black tabular-nums tracking-tight font-mono py-4 bg-emerald-900/70 hover:bg-emerald-900 rounded-xl border border-emerald-500/40 active:scale-95 transition cursor-pointer"
+                    >
+                      {scoreA}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addPoint("A")}
+                      className="w-full py-3.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-base shadow active:scale-95 transition cursor-pointer"
+                    >
+                      +1 Point
+                    </button>
+                  </div>
+
+                  {/* Team B Side */}
+                  <div className="text-center space-y-2 z-0">
+                    <p className="font-bold text-sm truncate px-1 text-emerald-100">{team2Name}</p>
+                    <button
+                      type="button"
+                      onClick={() => addPoint("B")}
+                      title="Tap to add point"
+                      className="w-full text-6xl font-black tabular-nums tracking-tight font-mono py-4 bg-emerald-900/70 hover:bg-emerald-900 rounded-xl border border-emerald-500/40 active:scale-95 transition cursor-pointer"
+                    >
+                      {scoreB}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addPoint("B")}
+                      className="w-full py-3.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-base shadow active:scale-95 transition cursor-pointer"
+                    >
+                      +1 Point
+                    </button>
+                  </div>
                 </div>
-              )}
 
-              {/* Court with Vertical Net Divider */}
-              <div className="relative grid grid-cols-2 gap-6 items-center">
-                {/* Vertical Net Divider */}
-                <div className="absolute left-1/2 top-0 bottom-0 -translate-x-1/2 flex flex-col items-center justify-center pointer-events-none z-10">
-                  <div className="w-px h-full border-r-2 border-dashed border-emerald-300/40" />
-                  <span className="absolute bg-emerald-900 border border-emerald-500/50 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest text-emerald-200 shadow">
-                    NET
-                  </span>
-                </div>
+                {/* Bottom Actions */}
+                <div className="flex items-center justify-between pt-4 mt-3 border-t border-emerald-700/60">
+                  <button
+                    type="button"
+                    onClick={undoPoint}
+                    disabled={scoreLog.length === 0}
+                    className="flex items-center gap-1.5 text-xs text-emerald-200 hover:text-white disabled:opacity-30 transition font-medium"
+                  >
+                    <RotateCcw size={13} />
+                    <span>Undo point</span>
+                  </button>
 
-                {/* Team A Side */}
-                <div className="text-center space-y-2 z-0">
-                  <p className="font-bold text-sm truncate px-1 text-emerald-100">{team1Name}</p>
-                  <button
-                    type="button"
-                    onClick={() => addPoint("A")}
-                    title="Tap to add point"
-                    className="w-full text-6xl font-black tabular-nums tracking-tight font-mono py-4 bg-emerald-900/70 hover:bg-emerald-900 rounded-xl border border-emerald-500/40 active:scale-95 transition cursor-pointer"
-                  >
-                    {scoreA}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => addPoint("A")}
-                    className="w-full py-3.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-base shadow active:scale-95 transition cursor-pointer"
-                  >
-                    +1 Point
-                  </button>
-                </div>
+                  {gamesHistory.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm("Finish match now and record completed sets?")) {
+                          setStep("finished");
+                        }
+                      }}
+                      className="text-xs text-amber-300 hover:text-amber-100 font-semibold underline underline-offset-2"
+                    >
+                      Finish match now
+                    </button>
+                  )}
 
-                {/* Team B Side */}
-                <div className="text-center space-y-2 z-0">
-                  <p className="font-bold text-sm truncate px-1 text-emerald-100">{team2Name}</p>
                   <button
                     type="button"
-                    onClick={() => addPoint("B")}
-                    title="Tap to add point"
-                    className="w-full text-6xl font-black tabular-nums tracking-tight font-mono py-4 bg-emerald-900/70 hover:bg-emerald-900 rounded-xl border border-emerald-500/40 active:scale-95 transition cursor-pointer"
+                    onClick={() => {
+                      if (confirm("Cancel live scoring and reset?")) {
+                        setStep("setup");
+                      }
+                    }}
+                    className="text-xs text-emerald-300/80 hover:text-red-300 transition"
                   >
-                    {scoreB}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => addPoint("B")}
-                    className="w-full py-3.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-base shadow active:scale-95 transition cursor-pointer"
-                  >
-                    +1 Point
+                    Reset match
                   </button>
                 </div>
               </div>
-
-              {/* Bottom Actions */}
-              <div className="flex items-center justify-between pt-4 mt-3 border-t border-emerald-700/60">
-                <button
-                  type="button"
-                  onClick={undoPoint}
-                  disabled={scoreLog.length === 0}
-                  className="flex items-center gap-1.5 text-xs text-emerald-200 hover:text-white disabled:opacity-30 transition font-medium"
-                >
-                  <RotateCcw size={13} />
-                  <span>Undo point</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (confirm("Cancel live scoring and reset?")) {
-                      setStep("setup");
-                    }
-                  }}
-                  className="text-xs text-emerald-300/80 hover:text-red-300 transition"
-                >
-                  Reset match
-                </button>
-              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {step === "finished" && (
           <Card className="text-center py-6 space-y-4 bg-gradient-to-b from-brand/10 to-surface border-brand/30">
