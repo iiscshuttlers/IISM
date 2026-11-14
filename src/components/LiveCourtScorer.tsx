@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Play, RotateCcw, Trophy, Check } from "lucide-react";
+import { Play, RotateCcw, Trophy, Check, Pencil } from "lucide-react";
 import { toast } from "sonner";
-import { Button, Card, ConfirmDialog, Field, Select, Sheet } from "./ui";
+import { Button, Card, ConfirmDialog, Field, Select, Sheet, cx } from "./ui";
 import { CATEGORIES, isSingles, slotGenders, type Category } from "../lib/scores";
 import type { Member } from "../lib/types";
 import type { MatchInput } from "../lib/api";
@@ -22,6 +22,9 @@ export function LiveCourtScorer({
   const [step, setStep] = useState<"setup" | "scoring" | "finished">("setup");
   const [category, setCategory] = useState<Category>("MS");
   const [targetPoints, setTargetPoints] = useState<number>(21);
+  const [isCustomPoints, setIsCustomPoints] = useState<boolean>(false);
+  const [enableDeuce, setEnableDeuce] = useState<boolean>(true);
+  const [editingTargetDuringGame, setEditingTargetDuringGame] = useState<boolean>(false);
   const [matchFormat, setMatchFormat] = useState<"best_of_3" | "1_set">("best_of_3");
   const [slots, setSlots] = useState<(string | null)[]>([null, null, null, null]);
 
@@ -37,15 +40,16 @@ export function LiveCourtScorer({
   const [confirmFinish, setConfirmFinish] = useState(false);
 
   const setsToWin = matchFormat === "1_set" ? 1 : 2;
-  const deuceAt = targetPoints - 1;
-  const cap =
-    targetPoints === 21
+  const deuceAt = enableDeuce ? targetPoints - 1 : targetPoints;
+  const cap = enableDeuce
+    ? targetPoints === 21
       ? 30
       : targetPoints === 15
       ? 21
       : targetPoints === 11
       ? 15
-      : targetPoints + 5;
+      : targetPoints + Math.max(2, Math.min(9, Math.round(targetPoints * 0.4)))
+    : targetPoints;
 
   const singles = isSingles(category);
   const want = slotGenders(category);
@@ -83,11 +87,12 @@ export function LiveCourtScorer({
     setScoreB(nextB);
 
     // Win condition for current game
-    const isGameWon =
-      (nextA >= targetPoints && nextA - nextB >= 2) ||
-      nextA >= cap ||
-      (nextB >= targetPoints && nextB - nextA >= 2) ||
-      nextB >= cap;
+    const isGameWon = enableDeuce
+      ? (nextA >= targetPoints && nextA - nextB >= 2) ||
+        nextA >= cap ||
+        (nextB >= targetPoints && nextB - nextA >= 2) ||
+        nextB >= cap
+      : nextA >= targetPoints || nextB >= targetPoints;
 
     if (isGameWon) {
       const winnerSide = nextA > nextB ? "A" : "B";
@@ -190,17 +195,90 @@ export function LiveCourtScorer({
               </Field>
             </div>
 
-            <Field label="Points per set">
-              <Select
-                value={targetPoints}
-                onChange={(e) => setTargetPoints(Number(e.target.value))}
-              >
-                <option value={21}>21 Points (Standard BWF · Deuce to 30)</option>
-                <option value={15}>15 Points (Training Camp / Fast · Deuce to 21)</option>
-                <option value={11}>11 Points (King of the Court · Deuce to 15)</option>
-                <option value={30}>30 Points (Single Game Marathon)</option>
-              </Select>
-            </Field>
+            {/* Dynamic Points Per Set */}
+            <div className="space-y-1.5 p-3 rounded-xl bg-surface-2/60 border border-line">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-ink">Points per set</span>
+                <label className="flex items-center gap-1.5 text-xs text-ink-soft cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={enableDeuce}
+                    onChange={(e) => setEnableDeuce(e.target.checked)}
+                    className="rounded border-line text-brand"
+                  />
+                  <span>Deuce (win by 2)</span>
+                </label>
+              </div>
+
+              {/* Presets and Custom button */}
+              <div className="flex items-center gap-1.5 pt-1">
+                {[11, 15, 21, 30].map((pts) => (
+                  <button
+                    key={pts}
+                    type="button"
+                    onClick={() => {
+                      setTargetPoints(pts);
+                      setIsCustomPoints(false);
+                    }}
+                    className={cx(
+                      "flex-1 py-1.5 text-xs font-bold rounded-lg border transition",
+                      targetPoints === pts && !isCustomPoints
+                        ? "bg-brand text-white border-brand shadow-sm"
+                        : "bg-surface text-ink border-line hover:bg-line/40"
+                    )}
+                  >
+                    {pts} pts
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setIsCustomPoints(true)}
+                  className={cx(
+                    "px-2.5 py-1.5 text-xs font-bold rounded-lg border transition",
+                    isCustomPoints
+                      ? "bg-brand text-white border-brand shadow-sm"
+                      : "bg-surface text-ink border-line hover:bg-line/40"
+                  )}
+                >
+                  Custom
+                </button>
+              </div>
+
+              {/* Dynamic Stepper & Custom Number Input */}
+              {isCustomPoints && (
+                <div className="flex items-center gap-2 pt-2 animate-in fade-in">
+                  <div className="flex items-center gap-1 bg-surface rounded-lg border border-line p-1">
+                    <button
+                      type="button"
+                      disabled={targetPoints <= 3}
+                      onClick={() => setTargetPoints((p) => Math.max(3, p - 1))}
+                      className="w-7 h-7 flex items-center justify-center rounded hover:bg-line/40 text-sm font-bold text-ink"
+                    >
+                      –
+                    </button>
+                    <input
+                      type="number"
+                      min={3}
+                      max={99}
+                      value={targetPoints}
+                      onChange={(e) => setTargetPoints(Math.max(3, Math.min(99, Number(e.target.value) || 21)))}
+                      className="w-14 text-center font-mono font-bold text-sm bg-surface-2 rounded border border-line py-1 text-ink focus:outline-none focus:ring-1 focus:ring-brand"
+                    />
+                    <button
+                      type="button"
+                      disabled={targetPoints >= 99}
+                      onClick={() => setTargetPoints((p) => Math.min(99, p + 1))}
+                      className="w-7 h-7 flex items-center justify-center rounded hover:bg-line/40 text-sm font-bold text-ink"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <span className="text-xs text-ink-soft">
+                    Playing to <strong>{targetPoints} pts</strong> {enableDeuce ? `(Cap at ${cap})` : "(Sudden death)"}
+                  </span>
+                </div>
+              )}
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -298,9 +376,20 @@ export function LiveCourtScorer({
             <div className="space-y-4">
               {/* Game Status Header */}
               <div className="flex items-center justify-between text-xs px-2.5 py-1.5 bg-surface-2 rounded-lg">
-                <span className="font-bold text-brand uppercase">
-                  {category} · {matchFormat === "1_set" ? "1 Set Shootout" : `Set ${currentGame} of 3`} ({targetPoints} pts)
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-brand uppercase">
+                    {category} · {matchFormat === "1_set" ? "1 Set Shootout" : `Set ${currentGame} of 3`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setEditingTargetDuringGame(!editingTargetDuringGame)}
+                    title="Change target points dynamically"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface border border-line text-ink font-semibold hover:border-brand transition cursor-pointer"
+                  >
+                    <span>{targetPoints} pts</span>
+                    <Pencil size={10} className="text-ink-soft" />
+                  </button>
+                </div>
                 <span className="font-mono text-ink-soft">
                   Sets: {winsA} – {winsB}
                 </span>
@@ -308,6 +397,43 @@ export function LiveCourtScorer({
                   <span className="text-ink-soft font-mono">({gamesHistory.join(", ")})</span>
                 )}
               </div>
+
+              {/* In-game quick point target adjustment drawer */}
+              {editingTargetDuringGame && (
+                <div className="p-2.5 bg-surface-2 border border-brand/40 rounded-xl space-y-2 animate-in fade-in text-xs">
+                  <div className="flex items-center justify-between font-semibold text-ink">
+                    <span>Adjust target points for this set:</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditingTargetDuringGame(false)}
+                      className="text-ink-soft hover:text-ink px-1"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {[7, 11, 15, 21, 30].map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => {
+                          setTargetPoints(p);
+                          setEditingTargetDuringGame(false);
+                          toast.success(`Target points changed to ${p}`);
+                        }}
+                        className={cx(
+                          "flex-1 py-1 rounded font-bold border transition cursor-pointer",
+                          targetPoints === p
+                            ? "bg-brand text-white border-brand shadow-sm"
+                            : "bg-surface border-line hover:bg-line/40 text-ink"
+                        )}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Visual Badminton Court Scoreboard */}
               <div className="rounded-xl overflow-hidden border-2 border-emerald-700 bg-emerald-800 shadow-md text-white p-4">
