@@ -6,6 +6,7 @@ import { useAttendance, useDrills, useMatches, useMembers, useSessions, useStand
 import { MatchCard } from "../components/MatchCard";
 import { GuideButton } from "../components/GuideModal";
 import { PairingHelperModal } from "../components/PairingHelper";
+import { CampHighlightsCard } from "../components/CampHighlights";
 import { Badge, Button, Card, Empty, fmtDate, today } from "../components/ui";
 import { DRILL_TYPES } from "../lib/types";
 
@@ -138,6 +139,11 @@ export default function TodayPage() {
           />
         </Card>
       )}
+
+      {/* Camp Awards & Leaders */}
+      <CampHighlightsCard
+        standings={standings.data ?? []}
+      />
 
       <section>
         <div className="mb-2 flex items-center justify-between">

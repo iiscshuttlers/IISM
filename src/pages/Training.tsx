@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { CheckCheck, Plus, Sparkles, Trash2 } from "lucide-react";
+import { CheckCheck, Plus, Sparkles, Trash2, Timer } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
 import { useAttendance, useDrills, useMembers, useSessions, useTrainingMutations } from "../lib/api";
 import { errorText } from "../lib/supabase";
 import { Badge, Button, Card, Empty, Field, Input, PageTitle, Select, Sheet, Textarea, cx, fmtDate, today } from "../components/ui";
 import { DrillTemplatesSheet, type DrillTemplate } from "../components/DrillTemplates";
+import { DrillTimerModal } from "../components/DrillTimer";
 import { DRILL_TYPES, type Attendance, type Drill, type DrillType, type Session } from "../lib/types";
 
 export default function TrainingPage() {
@@ -18,12 +19,32 @@ export default function TrainingPage() {
   const members = useMembers(campId);
   const mut = useTrainingMutations(campId);
   const [adding, setAdding] = useState(false);
+  const [timerOpen, setTimerOpen] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const open = (sessions.data ?? []).find((x) => x.id === openId) ?? null;
 
   return (
     <div>
-      <PageTitle action={<Button onClick={() => setAdding(true)}><Plus size={16} /> Session</Button>}>Training log</PageTitle>
+      <PageTitle
+        action={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setTimerOpen(true)}
+              className="flex items-center gap-1.5"
+            >
+              <Timer size={14} className="text-brand" />
+              <span>Interval Timer</span>
+            </Button>
+            <Button size="sm" onClick={() => setAdding(true)}>
+              <Plus size={16} /> Session
+            </Button>
+          </div>
+        }
+      >
+        Training log
+      </PageTitle>
       {sessions.isLoading ? (
         <p className="text-sm text-ink-soft">Loading…</p>
       ) : (sessions.data ?? []).length === 0 ? (
@@ -74,6 +95,11 @@ export default function TrainingPage() {
           />
         )}
       </Sheet>
+
+      <DrillTimerModal
+        open={timerOpen}
+        onClose={() => setTimerOpen(false)}
+      />
     </div>
   );
 }

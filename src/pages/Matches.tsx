@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Plus } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
+import { Plus, Play, Search } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
 import { useMatchMutations, useMatches, useMembers, useStandings } from "../lib/api";
@@ -7,7 +7,8 @@ import { errorText } from "../lib/supabase";
 import { MatchForm } from "../components/MatchForm";
 import { MatchCard } from "../components/MatchCard";
 import { PairingHelperModal } from "../components/PairingHelper";
-import { Button, Empty, Field, PageTitle, Segmented, Sheet, Textarea } from "../components/ui";
+import { LiveCourtScorer } from "../components/LiveCourtScorer";
+import { Button, Empty, Field, Input, PageTitle, Segmented, Sheet, Textarea } from "../components/ui";
 import type { Category } from "../lib/scores";
 import type { Match } from "../lib/types";
 
@@ -19,7 +20,10 @@ export default function MatchesPage() {
   const standings = useStandings(campId);
   const mut = useMatchMutations(campId);
   const [filter, setFilter] = useState<"all" | "mine" | "disputed">("all");
+  const [catFilter, setCatFilter] = useState<string>("ALL");
+  const [search, setSearch] = useState("");
   const [recording, setRecording] = useState(false);
+  const [liveScoring, setLiveScoring] = useState(false);
   const [prefill, setPrefill] = useState<{ category: Category; slots: (string | null)[] } | null>(null);
   const [editing, setEditing] = useState<Match | null>(null);
   const [disputing, setDisputing] = useState<Match | null>(null);
@@ -33,9 +37,19 @@ export default function MatchesPage() {
 
   const people = members.data ?? [];
   const players = people.filter((p) => p.role === "player");
+  const memberMap = useMemo(() => new Map(people.map((p) => [p.id, p.full_name.toLowerCase()])), [people]);
+
   const list = (matches.data ?? []).filter((m) => {
-    if (filter === "mine") return [m.t1_p1, m.t1_p2, m.t2_p1, m.t2_p2].includes(s.meId ?? "");
-    if (filter === "disputed") return m.status === "disputed";
+    if (filter === "mine") {
+      if (![m.t1_p1, m.t1_p2, m.t2_p1, m.t2_p2].includes(s.meId ?? "")) return false;
+    }
+    if (filter === "disputed" && m.status !== "disputed") return false;
+    if (catFilter !== "ALL" && m.category !== catFilter) return false;
+    if (search.trim()) {
+      const q = search.toLowerCase().trim();
+      const names = [m.t1_p1, m.t1_p2, m.t2_p1, m.t2_p2].map((id) => (id ? memberMap.get(id) ?? "" : "")).join(" ");
+      if (!names.includes(q)) return false;
+    }
     return true;
   });
   const disputedCount = (matches.data ?? []).filter((m) => m.status === "disputed").length;
@@ -45,6 +59,16 @@ export default function MatchesPage() {
       <PageTitle
         action={
           <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setLiveScoring(true)}
+              className="flex items-center gap-1.5"
+            >
+              <Play size={14} className="text-emerald-600 fill-emerald-600" />
+              <span>Live Court</span>
+            </Button>
+
             {players.length >= 2 && (
               <PairingHelperModal
                 players={players}
@@ -57,6 +81,7 @@ export default function MatchesPage() {
               />
             )}
             <Button
+              size="sm"
               onClick={() => {
                 setPrefill(null);
                 setRecording(true);
@@ -72,16 +97,49 @@ export default function MatchesPage() {
       {!s.camp!.players_see_all_results && !s.isStaff && (
         <p className="mb-3 text-xs text-ink-soft">The camp admin has limited this view to your own matches.</p>
       )}
-      <div className="mb-4">
-        <Segmented
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { value: "all", label: "All" },
-            { value: "mine", label: "Mine" },
-            { value: "disputed", label: `Disputed${disputedCount ? ` (${disputedCount})` : ""}` },
-          ]}
-        />
+
+      {/* Filter Bars */}
+      <div className="space-y-2 mb-4">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex-1">
+            <Segmented
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: "all", label: "All Matches" },
+                { value: "mine", label: "My Matches" },
+                { value: "disputed", label: `Disputed${disputedCount ? ` (${disputedCount})` : ""}` },
+              ]}
+            />
+          </div>
+          <div className="relative w-full sm:w-48">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-soft" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search player…"
+              className="pl-8 !py-1 text-xs"
+            />
+          </div>
+        </div>
+
+        {/* Category Filters */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+          {["ALL", "MS", "WS", "MD", "WD", "XD"].map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setCatFilter(cat)}
+              className={`px-2.5 py-1 rounded-full font-bold uppercase tracking-wider transition-colors border ${
+                catFilter === cat
+                  ? "bg-brand text-white border-brand shadow-xs"
+                  : "bg-surface text-ink-soft border-line hover:border-brand/40"
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
       </div>
 
       {matches.isLoading ? (
@@ -169,6 +227,17 @@ export default function MatchesPage() {
           </div>
         )}
       </Sheet>
+
+      {/* Live Court Scorer */}
+      <LiveCourtScorer
+        open={liveScoring}
+        onClose={() => setLiveScoring(false)}
+        players={players}
+        onSaveMatch={async (m) => {
+          await mut.record.mutateAsync(m);
+        }}
+        busy={mut.record.isPending}
+      />
     </div>
   );
 }

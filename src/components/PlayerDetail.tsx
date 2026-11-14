@@ -1,7 +1,8 @@
-import { useMemo } from "react";
-import { Dumbbell, ArrowRightLeft } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Dumbbell, ArrowRightLeft, FileText } from "lucide-react";
 import { Badge, Button, Card, Sheet } from "./ui";
 import { CATEGORIES } from "../lib/scores";
+import { PlayerReportCardModal } from "./PlayerReportCard";
 import type { Assessment, Attendance, Match, Member, Standing } from "../lib/types";
 
 export function PlayerDetailSheet({
@@ -60,6 +61,8 @@ export function PlayerDetailSheet({
     return assessments.filter((a) => a.person_id === personId);
   }, [assessments, personId, isStaff]);
 
+  const [showReport, setShowReport] = useState(false);
+
   const memberMap = useMemo(() => new Map(members.map((m) => [m.id, m.full_name])), [members]);
   const formatName = (id: string | null) => (id ? memberMap.get(id) ?? "Unknown" : "");
 
@@ -98,9 +101,19 @@ export function PlayerDetailSheet({
             )}
           </div>
 
-          {/* Quick Action: Head to Head */}
-          {onCompare && standing && standing.played > 0 && (
-            <div className="mt-3 pt-3 border-t border-line flex justify-end">
+          {/* Quick Actions */}
+          <div className="mt-3 pt-3 border-t border-line flex flex-wrap items-center justify-end gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="text-xs"
+              onClick={() => setShowReport(true)}
+            >
+              <FileText size={13} className="mr-1" />
+              Report Card / Certificate
+            </Button>
+
+            {onCompare && standing && standing.played > 0 && (
               <Button
                 variant="secondary"
                 size="sm"
@@ -111,10 +124,10 @@ export function PlayerDetailSheet({
                 }}
               >
                 <ArrowRightLeft size={13} className="mr-1" />
-                Head-to-head comparison
+                Head-to-head
               </Button>
-            </div>
-          )}
+            )}
+          </div>
         </Card>
 
         {/* Stats Grid */}
@@ -282,6 +295,17 @@ export function PlayerDetailSheet({
           )}
         </section>
       </div>
+
+      <PlayerReportCardModal
+        open={showReport}
+        onClose={() => setShowReport(false)}
+        member={member}
+        standing={standing}
+        rank={rank}
+        attendance={attendance}
+        assessments={assessments}
+        campName="IISc Badminton Training Camp"
+      />
     </Sheet>
   );
 }
