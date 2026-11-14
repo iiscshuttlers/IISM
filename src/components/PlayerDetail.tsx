@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { Dumbbell, ArrowRightLeft, FileText } from "lucide-react";
 import { Badge, Button, Card, Sheet } from "./ui";
 import { CATEGORIES } from "../lib/scores";
+import { SkillRadar } from "./SkillRadar";
 import { PlayerReportCardModal } from "./PlayerReportCard";
 import type { Assessment, Attendance, Match, Member, Standing } from "../lib/types";
 
@@ -219,6 +220,18 @@ export function PlayerDetailSheet({
               <p className="text-xs text-ink-soft italic">No coach assessment logged yet.</p>
             ) : (
               <div className="space-y-3">
+                {myAssessments[0] && (
+                  <div className="flex flex-col items-center justify-center p-2 rounded bg-surface-2">
+                    <SkillRadar
+                      technique={myAssessments[0].technique}
+                      fitness={myAssessments[0].fitness}
+                      tactics={myAssessments[0].tactics}
+                      attitude={myAssessments[0].attitude}
+                      size={180}
+                    />
+                    <span className="text-[10px] text-ink-soft mt-1">Latest Assessment Radar</span>
+                  </div>
+                )}
                 {myAssessments.map((a) => (
                   <div key={a.id} className="p-2.5 rounded bg-surface-2 space-y-1.5 text-xs">
                     <div className="flex justify-between text-ink-soft text-[11px]">

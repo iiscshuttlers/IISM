@@ -1,5 +1,7 @@
+import { Share2 } from "lucide-react";
 import { Badge, Button, cx, fmtDate } from "./ui";
 import { CATEGORIES, isSingles } from "../lib/scores";
+import { shareMatchOnWhatsApp } from "../lib/whatsappShare";
 import type { Match, Member } from "../lib/types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -61,8 +63,8 @@ export function MatchCard({ match: m, people, meId, isStaff, onEdit, onDispute, 
           Dispute ({name(m.disputed_by)}): {m.dispute_reason}
         </p>
       )}
-      {(canEdit || canDispute || isStaff) && (onEdit || onDispute || onResolve) && (
-        <div className="mt-2 flex flex-wrap gap-2">
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
           {canEdit && m.status !== "void" && onEdit && <Button size="sm" variant="secondary" onClick={() => onEdit(m)}>Edit</Button>}
           {canDispute && onDispute && <Button size="sm" variant="secondary" onClick={() => onDispute(m)}>Dispute</Button>}
           {isStaff && onResolve && (
@@ -71,7 +73,18 @@ export function MatchCard({ match: m, people, meId, isStaff, onEdit, onDispute, 
             </Button>
           )}
         </div>
-      )}
+        {m.status === "confirmed" && (
+          <button
+            type="button"
+            onClick={() => shareMatchOnWhatsApp(m, people)}
+            className="text-xs text-ink-soft hover:text-brand flex items-center gap-1 px-1.5 py-1 rounded bg-surface-2 hover:bg-surface-3 transition-colors shrink-0"
+            title="Share result to WhatsApp"
+          >
+            <Share2 size={13} />
+            <span>Share</span>
+          </button>
+        )}
+      </div>
     </div>
   );
 }

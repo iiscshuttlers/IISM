@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { Plus, Play, Search } from "lucide-react";
+import { Plus, Play, Search, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
 import { useMatchMutations, useMatches, useMembers, useStandings } from "../lib/api";
@@ -8,6 +8,7 @@ import { MatchForm } from "../components/MatchForm";
 import { MatchCard } from "../components/MatchCard";
 import { PairingHelperModal } from "../components/PairingHelper";
 import { LiveCourtScorer } from "../components/LiveCourtScorer";
+import { TournamentGeneratorModal } from "../components/TournamentGenerator";
 import { Button, Empty, Field, Input, PageTitle, Segmented, Sheet, Textarea } from "../components/ui";
 import type { Category } from "../lib/scores";
 import type { Match } from "../lib/types";
@@ -24,6 +25,7 @@ export default function MatchesPage() {
   const [search, setSearch] = useState("");
   const [recording, setRecording] = useState(false);
   const [liveScoring, setLiveScoring] = useState(false);
+  const [tournamentOpen, setTournamentOpen] = useState(false);
   const [prefill, setPrefill] = useState<{ category: Category; slots: (string | null)[] } | null>(null);
   const [editing, setEditing] = useState<Match | null>(null);
   const [disputing, setDisputing] = useState<Match | null>(null);
@@ -68,6 +70,18 @@ export default function MatchesPage() {
               <Play size={14} className="text-emerald-600 fill-emerald-600" />
               <span>Live Court</span>
             </Button>
+
+            {players.length >= 2 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setTournamentOpen(true)}
+                className="flex items-center gap-1.5"
+              >
+                <Trophy size={14} className="text-amber-500" />
+                <span>Tournaments</span>
+              </Button>
+            )}
 
             {players.length >= 2 && (
               <PairingHelperModal
@@ -237,6 +251,18 @@ export default function MatchesPage() {
           await mut.record.mutateAsync(m);
         }}
         busy={mut.record.isPending}
+      />
+
+      {/* Tournament Matchday Generator */}
+      <TournamentGeneratorModal
+        open={tournamentOpen}
+        onClose={() => setTournamentOpen(false)}
+        players={players}
+        onStartMatch={(cat, slots) => {
+          setTournamentOpen(false);
+          setPrefill({ category: cat, slots });
+          setRecording(true);
+        }}
       />
     </div>
   );

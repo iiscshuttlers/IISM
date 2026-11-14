@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCheck, Plus, Sparkles, Trash2, Timer } from "lucide-react";
+import { CheckCheck, Plus, Sparkles, Trash2, Timer, PenTool } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
 import { useAttendance, useDrills, useMembers, useSessions, useTrainingMutations } from "../lib/api";
@@ -7,6 +7,7 @@ import { errorText } from "../lib/supabase";
 import { Badge, Button, Card, Empty, Field, Input, PageTitle, Select, Sheet, Textarea, cx, fmtDate, today } from "../components/ui";
 import { DrillTemplatesSheet, type DrillTemplate } from "../components/DrillTemplates";
 import { DrillTimerModal } from "../components/DrillTimer";
+import { TacticalBoardModal } from "../components/TacticalBoard";
 import { DRILL_TYPES, type Attendance, type Drill, type DrillType, type Session } from "../lib/types";
 
 export default function TrainingPage() {
@@ -20,6 +21,7 @@ export default function TrainingPage() {
   const mut = useTrainingMutations(campId);
   const [adding, setAdding] = useState(false);
   const [timerOpen, setTimerOpen] = useState(false);
+  const [tacticsOpen, setTacticsOpen] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const open = (sessions.data ?? []).find((x) => x.id === openId) ?? null;
 
@@ -28,6 +30,15 @@ export default function TrainingPage() {
       <PageTitle
         action={
           <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setTacticsOpen(true)}
+              className="flex items-center gap-1.5"
+            >
+              <PenTool size={14} className="text-brand" />
+              <span>Tactics Board</span>
+            </Button>
             <Button
               variant="secondary"
               size="sm"
@@ -99,6 +110,11 @@ export default function TrainingPage() {
       <DrillTimerModal
         open={timerOpen}
         onClose={() => setTimerOpen(false)}
+      />
+
+      <TacticalBoardModal
+        open={tacticsOpen}
+        onClose={() => setTacticsOpen(false)}
       />
     </div>
   );
