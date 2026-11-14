@@ -8,3 +8,4 @@ Raja/
 test-results/
 playwright-report/
 .lighthouseci/
+supabase/.temp/
