@@ -25,7 +25,7 @@ export function LiveCourtScorer({
   const [isCustomPoints, setIsCustomPoints] = useState<boolean>(false);
   const [enableDeuce, setEnableDeuce] = useState<boolean>(true);
   const [editingTargetDuringGame, setEditingTargetDuringGame] = useState<boolean>(false);
-  const [matchFormat, setMatchFormat] = useState<"best_of_3" | "1_set">("best_of_3");
+  const [matchFormat, setMatchFormat] = useState<"best_of_3" | "1_set" | "best_of_5">("best_of_3");
   const [slots, setSlots] = useState<(string | null)[]>([null, null, null, null]);
 
   // Scoring state
@@ -39,7 +39,7 @@ export function LiveCourtScorer({
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmFinish, setConfirmFinish] = useState(false);
 
-  const setsToWin = matchFormat === "1_set" ? 1 : 2;
+  const setsToWin = matchFormat === "1_set" ? 1 : matchFormat === "best_of_5" ? 3 : 2;
   const deuceAt = enableDeuce ? targetPoints - 1 : targetPoints;
   const cap = enableDeuce
     ? targetPoints === 21
@@ -187,10 +187,11 @@ export function LiveCourtScorer({
               <Field label="Match format">
                 <Select
                   value={matchFormat}
-                  onChange={(e) => setMatchFormat(e.target.value as "best_of_3" | "1_set")}
+                  onChange={(e) => setMatchFormat(e.target.value as "best_of_3" | "1_set" | "best_of_5")}
                 >
-                  <option value="best_of_3">Best of 3 Sets</option>
-                  <option value="1_set">1 Set (Single Shootout)</option>
+                  <option value="1_set">1 Set (Single Shootout · 1 to win)</option>
+                  <option value="best_of_3">Best of 3 Sets (Standard · 2 to win)</option>
+                  <option value="best_of_5">Best of 5 Sets (Extended · 3 to win)</option>
                 </Select>
               </Field>
             </div>
@@ -378,7 +379,7 @@ export function LiveCourtScorer({
               <div className="flex items-center justify-between text-xs px-2.5 py-1.5 bg-surface-2 rounded-lg">
                 <div className="flex items-center gap-1.5">
                   <span className="font-bold text-brand uppercase">
-                    {category} · {matchFormat === "1_set" ? "1 Set Shootout" : `Set ${currentGame} of 3`}
+                    {category} · {matchFormat === "1_set" ? "1 Set Shootout" : matchFormat === "best_of_5" ? `Set ${currentGame} of 5` : `Set ${currentGame} of 3`}
                   </span>
                   <button
                     type="button"

@@ -6,7 +6,7 @@ import type { Match, Member } from "../lib/types";
 import type { MatchInput } from "../lib/api";
 import { errorText } from "../lib/supabase";
 
-const emptyRows = () => [{ a: "", b: "" }, { a: "", b: "" }, { a: "", b: "" }];
+const createEmptyRows = (count: number) => Array.from({ length: count }, () => ({ a: "", b: "" }));
 
 export interface Lineup { category: Category; slots: (string | null)[] }
 
@@ -25,13 +25,22 @@ export function MatchForm({ players, initial, submitLabel, onSubmit, busy, lockP
 }) {
   const [category, setCategory] = useState<Category>(initial?.category ?? initialCategory ?? "MS");
   const [playedOn, setPlayedOn] = useState(initial?.played_on ?? today());
+  const [matchFormat, setMatchFormat] = useState<"best_of_3" | "1_set" | "best_of_5">(() => {
+    if (initial?.games?.length === 1) return "1_set";
+    if (initial?.games && initial.games.length > 3) return "best_of_5";
+    return "best_of_3";
+  });
   const [slots, setSlots] = useState<(string | null)[]>(
     initial ? [initial.t1_p1, initial.t1_p2, initial.t2_p1, initial.t2_p2] : initialSlots ?? [null, null, null, null],
   );
   const [rows, setRows] = useState(() => {
-    const r = emptyRows();
-    initial?.games?.forEach((g, i) => { if (i < 3) { const [a, b] = g.split("-"); r[i] = { a, b }; } });
-    return r;
+    if (initial?.games?.length) {
+      return initial.games.map((g) => {
+        const [a, b] = g.split("-");
+        return { a, b };
+      });
+    }
+    return createEmptyRows(initial?.games?.length === 1 ? 1 : 3);
   });
   const [winner, setWinner] = useState<1 | 2 | null>(initial?.winner_side ?? null);
 
@@ -132,12 +141,36 @@ export function MatchForm({ players, initial, submitLabel, onSubmit, busy, lockP
         </div>
       </div>
 
+      {/* Dynamic Match Format Selector */}
+      <div className="flex items-center justify-between p-2 rounded-lg bg-surface-2/60 border border-line">
+        <span className="text-xs font-semibold text-ink">Match format</span>
+        <Segmented
+          value={matchFormat}
+          onChange={(f) => {
+            setMatchFormat(f);
+            const targetLen = f === "1_set" ? 1 : f === "best_of_5" ? 5 : 3;
+            setRows((prev) => {
+              if (prev.length === targetLen) return prev;
+              if (prev.length < targetLen) {
+                return [...prev, ...createEmptyRows(targetLen - prev.length)];
+              }
+              return prev.slice(0, targetLen);
+            });
+          }}
+          options={[
+            { value: "1_set", label: "1 Set (Shootout)" },
+            { value: "best_of_3", label: "Best of 3" },
+            { value: "best_of_5", label: "Best of 5" },
+          ]}
+        />
+      </div>
+
       <div>
         <div className="flex items-center justify-between mb-1">
           <p className="text-xs font-semibold text-ink-soft">Game scores (optional, A–B)</p>
           <button
             type="button"
-            onClick={() => setRows(emptyRows())}
+            onClick={() => setRows(createEmptyRows(rows.length))}
             className="text-[11px] text-ink-soft hover:text-red-500"
           >
             Clear scores
@@ -148,24 +181,43 @@ export function MatchForm({ players, initial, submitLabel, onSubmit, busy, lockP
           <span className="text-[10px] uppercase font-bold text-ink-soft">Presets:</span>
           <button
             type="button"
-            onClick={() => setRows([{ a: "21", b: "18" }, { a: "21", b: "16" }, { a: "", b: "" }])}
+            onClick={() => {
+              setMatchFormat("1_set");
+              setRows([{ a: "15", b: "12" }]);
+            }}
+            className="px-1.5 py-0.5 rounded bg-surface-2 hover:bg-surface-3 text-[11px] text-ink font-mono border border-line"
+          >
+            15-12 (1 set)
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMatchFormat("1_set");
+              setRows([{ a: "21", b: "19" }]);
+            }}
+            className="px-1.5 py-0.5 rounded bg-surface-2 hover:bg-surface-3 text-[11px] text-ink font-mono border border-line"
+          >
+            21-19 (1 set)
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMatchFormat("best_of_3");
+              setRows([{ a: "21", b: "18" }, { a: "21", b: "16" }, { a: "", b: "" }]);
+            }}
             className="px-1.5 py-0.5 rounded bg-surface-2 hover:bg-surface-3 text-[11px] text-ink font-mono border border-line"
           >
             21-18, 21-16
           </button>
           <button
             type="button"
-            onClick={() => setRows([{ a: "21", b: "15" }, { a: "18", b: "21" }, { a: "21", b: "17" }])}
+            onClick={() => {
+              setMatchFormat("best_of_3");
+              setRows([{ a: "21", b: "15" }, { a: "18", b: "21" }, { a: "21", b: "17" }]);
+            }}
             className="px-1.5 py-0.5 rounded bg-surface-2 hover:bg-surface-3 text-[11px] text-ink font-mono border border-line"
           >
             21-15, 18-21, 21-17
-          </button>
-          <button
-            type="button"
-            onClick={() => setRows([{ a: "21", b: "19" }, { a: "", b: "" }, { a: "", b: "" }])}
-            className="px-1.5 py-0.5 rounded bg-surface-2 hover:bg-surface-3 text-[11px] text-ink font-mono border border-line"
-          >
-            1 game (21-19)
           </button>
         </div>
 
@@ -181,6 +233,28 @@ export function MatchForm({ players, initial, submitLabel, onSubmit, busy, lockP
             </div>
           ))}
         </div>
+
+        {/* Dynamic Add / Remove Game buttons */}
+        <div className="flex items-center gap-3 pt-2">
+          <button
+            type="button"
+            disabled={rows.length >= 5}
+            onClick={() => setRows([...rows, { a: "", b: "" }])}
+            className="text-xs font-semibold text-brand hover:underline disabled:opacity-30 disabled:pointer-events-none"
+          >
+            + Add Game {rows.length + 1}
+          </button>
+          {rows.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setRows(rows.slice(0, -1))}
+              className="text-xs text-ink-soft hover:text-red-500"
+            >
+              – Remove Game {rows.length}
+            </button>
+          )}
+        </div>
+
         {parsed.error && <p className="mt-1 text-xs text-red-600">{parsed.error}</p>}
       </div>
 
