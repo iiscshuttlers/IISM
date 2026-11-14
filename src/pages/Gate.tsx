@@ -48,6 +48,9 @@ export function LoginPage() {
           {busy ? "Opening Google…" : "Continue with Google"}
         </Button>
         <p className="mt-4 text-xs text-ink-soft">Use the email your camp admin added to the roster.</p>
+        <a href={`${import.meta.env.BASE_URL}privacy.html`} className="mt-2 inline-block text-xs font-semibold text-brand">
+          Privacy policy
+        </a>
       </Card>
     </Centered>
   );

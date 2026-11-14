@@ -30,10 +30,10 @@ coach notes, hidden standings or the unpublished squad.
 
 | # | Task | Why |
 |---|---|---|
-| 2.1 | First git commit and a **private GitHub repo** | Safety and history |
-| 2.2 | **Host on Netlify** (free): connect the repo, add the two `VITE_` variables, auto-deploy on push | Players need a real link |
-| 2.3 | Update Supabase Site URL and redirect URLs plus Google's settings with the live address | Otherwise sign-in fails on the live site |
-| 2.3b | Add a public **/privacy** page. In Google Branding, set homepage = site URL and privacy policy = site URL + `/privacy`, add the host domain to authorised domains, then **Publish app** | Google requires both URLs before leaving Testing mode |
+| 2.1 | ✅ First commit. Create the **GitHub repo** (public: needed for free Pages) and push | Safety and history |
+| 2.2 | **Host on GitHub Pages**: deploy workflow ✅ ready. Set Pages source = GitHub Actions and add the two `VITE_` repo variables | Players need a real link |
+| 2.3 | Update Supabase Site URL and redirect URLs plus Google's JavaScript origins with the live address | Otherwise sign-in fails on the live site |
+| 2.3b | ✅ `privacy.html` added. In Google Branding, set homepage and privacy policy URLs, add `<owner>.github.io` to authorised domains, then **Publish app** | Google requires both URLs before leaving Testing mode |
 | 2.4 | **Phone polish:** phone-width check, easy-to-tap buttons, "Add to Home screen" support | Most use is courtside on phones |
 | 2.5 | **CSV export** for the admin (matches, attendance, drills, standings) | The free plan has no downloadable backups |
 | 2.6 | Delete Phase 1 test data, or start a fresh camp | Clean start |
@@ -111,5 +111,5 @@ coach notes, hidden standings or the unpublished squad.
 ## Open decisions
 1. Camp start date (times Phases 2–3).
 2. Squad of 10: fixed split (e.g. 5 M + 5 F, enforced at lock) or open?
-3. Hosting: Netlify (recommended) or GitHub Pages.
+3. ~~Hosting~~: decided, GitHub Pages.
 4. Coaches' names and emails.

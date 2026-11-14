@@ -45,14 +45,23 @@ triggers). The UI only mirrors them.
 6. Run `npm install`, then `npm run dev`, and open <http://localhost:5199>. Sign in with Google,
    create the camp, then add people under Settings.
 
-### Hosting
+### Hosting (GitHub Pages)
 
-`npm run build` produces a static site in `dist/`. Any static host works:
+The site deploys from `.github/workflows/deploy.yml` on every push to `master`. It runs the
+unit tests and builds with `BASE_PATH=/<repo>/`. Deep links work because the build copies
+`index.html` to `404.html`.
 
-- **Netlify**: build command `npm run build`, publish directory `dist`, and add the two `VITE_` variables.
-- **GitHub Pages** under `/<repo>/`: build with `BASE_PATH=/<repo>/ npm run build`.
-
-Add the final site URL to Supabase's Redirect URLs.
+1. Create the GitHub repo and push. Pages needs a **public** repo on a free plan. That's safe:
+   the code holds no secrets, and the database rules protect the data.
+2. Repo **Settings → Pages → Source: GitHub Actions**.
+3. Repo **Settings → Secrets and variables → Actions → Variables**: add `VITE_SUPABASE_URL` and
+   `VITE_SUPABASE_ANON_KEY` (the anon key is public by design).
+4. Re-run the workflow. The site is at `https://<owner>.github.io/<repo>/`.
+5. Supabase → Authentication → URL Configuration: Site URL = the site address; add
+   `https://<owner>.github.io/<repo>/**` to Redirect URLs.
+6. Google Auth Platform → Clients: add `https://<owner>.github.io` to Authorised JavaScript origins.
+   Branding: homepage = site address, privacy policy = site address + `privacy.html`, and add
+   `<owner>.github.io` to authorised domains. Then **Audience → Publish app**.
 
 ## Development
 

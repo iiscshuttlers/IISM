@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy policy · IISc Training Camp</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <style>
+    :root { --bg: #f6f7f6; --surface: #fff; --ink: #17201d; --soft: #5c6863; --brand: #0f766e; --line: #dfe3e1; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0e1412; --surface: #151d1a; --ink: #e8eeeb; --soft: #9aa8a2; --brand: #2dd4bf; --line: #2a3631; }
+    }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 680px; margin: 0 auto; padding: 32px 16px 64px; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+    h1 { font-size: 1.6rem; margin: 0 0 4px; }
+    h2 { font-size: 1.05rem; margin: 24px 0 6px; }
+    p, li { color: var(--ink); }
+    .muted { color: var(--soft); font-size: .9rem; }
+    a { color: var(--brand); }
+  </style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1>Privacy policy</h1>
+    <p class="muted">IISc Training Camp · last updated 14 November 2026</p>
+
+    <p>IISc Training Camp is a private website used by the players and coaches of an IISc badminton
+      selection camp to record practice matches and training, and to support squad selection. It is
+      not open to the public.</p>
+
+    <h2>What we store</h2>
+    <ul>
+      <li><strong>Profile:</strong> name, gender (used for match categories) and, only if the camp
+        admin adds it, a Google email address used to sign in.</li>
+      <li><strong>Sign-in:</strong> when you sign in with Google we receive your name, email address and
+        Google account identifier. We use them only to link you to the profile the camp admin created.</li>
+      <li><strong>Camp records:</strong> practice match results, training sessions, drills, attendance,
+        self-reported effort (RPE), coach assessments and selection decisions.</li>
+    </ul>
+
+    <h2>How it is used</h2>
+    <p>Only to run the camp: showing results and standings, logging training, and helping coaches
+      select the squad. There is no advertising, no tracking or analytics, and no location data.</p>
+
+    <h2>Who can see it</h2>
+    <ul>
+      <li>Only people on the camp roster can sign in and see camp data.</li>
+      <li>The camp admin decides whether players see everyone's results or only their own, and when
+        the squad is published.</li>
+      <li>Coach assessments and selection notes are visible to coaches and the camp admin only.</li>
+      <li>We do not sell or share data with anyone. It is not shared with any other app, including the
+        IISc Badminton Club app.</li>
+    </ul>
+
+    <h2>Where it is stored</h2>
+    <p>Data is stored in a Supabase (PostgreSQL) database protected by row-level security. The website
+      is hosted on GitHub Pages.</p>
+
+    <h2>Keeping and deleting data</h2>
+    <p>Data is kept for the duration of the camp and for the selection record afterwards. You can ask
+      the camp admin to correct or delete your profile and records at any time.</p>
+
+    <h2>Contact</h2>
+    <p>Questions or deletion requests: contact the camp admin through the camp group.</p>
+
+    <p class="muted"><a href="./">← Back to the camp site</a></p>
+  </div>
+</main>
+</body>
+</html>
