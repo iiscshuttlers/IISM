@@ -63,6 +63,18 @@ export default defineConfig({
     }),
     spaFallback(),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        // Stable vendor chunks: an app update doesn't make phones re-download the libraries.
+        manualChunks: {
+          react: ["react", "react-dom", "wouter"],
+          supabase: ["@supabase/supabase-js"],
+          query: ["@tanstack/react-query", "@tanstack/react-query-persist-client", "@tanstack/query-sync-storage-persister"],
+        },
+      },
+    },
+  },
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
-  test: { environment: "node" },
+  test: { environment: "node", include: ["src/**/*.test.ts"] },
 });

@@ -1,0 +1,70 @@
+name: Quality
+
+# Database security tests, browser smoke tests (PWA + offline) and Lighthouse on every push.
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  database:
+    name: Database rules (RLS, RPCs, Glicko-2, races)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start Supabase Postgres
+        run: |
+          docker run -d --name camp-test-pg -e POSTGRES_PASSWORD=postgres public.ecr.aws/supabase/postgres:17.6.1.141
+          for i in $(seq 1 60); do docker exec camp-test-pg pg_isready -U postgres -h localhost && break; sleep 2; done
+          sleep 5
+      - name: Assertions
+        run: |
+          out=$(bash supabase/tests/run.sh)
+          echo "$out"
+          echo "$out" | grep -q "ALL TRAINING CAMP ASSERTIONS PASSED"
+      - name: Lock-vs-edit race
+        run: |
+          out=$(bash supabase/tests/concurrency.sh)
+          echo "$out"
+          ! echo "$out" | grep -q "LOCKED-INVALID"
+
+  e2e:
+    name: Browser smoke tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+
+  lighthouse:
+    name: Lighthouse
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build (placeholder backend)
+        run: npx vite build
+        env:
+          BASE_PATH: /
+          VITE_SUPABASE_URL: https://placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: placeholder
+      - run: npx -y @lhci/cli@0.15.1 autorun
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighthouse-reports
+          path: .lighthouseci
+          retention-days: 14
