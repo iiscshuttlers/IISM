@@ -1,0 +1,19 @@
+{
+  "name": "IISc Training Camp",
+  "short_name": "Training Camp",
+  "description": "IISc Badminton Training Camp manager for live match tracking, drills, and squad selection",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
