@@ -33,9 +33,15 @@
     <h2>What we store</h2>
     <ul>
       <li><strong>Profile:</strong> name, gender (used for match categories) and, only if the camp
-        admin adds it, a Google email address used to sign in.</li>
-      <li><strong>Sign-in:</strong> when you sign in with Google we receive your name, email address and
-        Google account identifier. We use them only to link you to the profile the camp admin created.</li>
+        admin adds it, an email address used to sign in.</li>
+      <li><strong>Sign-in with Google:</strong> we receive your name, email address and Google account
+        identifier.</li>
+      <li><strong>Sign-in with email and password:</strong> we store your email address and a password
+        that is kept only in hashed form by our authentication provider (Supabase); nobody, including the
+        camp admin, can read it. Supabase may send you an email to confirm your address or reset your
+        password.</li>
+      <li>Either way, a sign-in is linked to a profile only after its email address is confirmed and
+        matches the one the camp admin entered.</li>
       <li><strong>Camp records:</strong> practice match results, training sessions, drills, attendance,
         self-reported effort (RPE), coach assessments and selection decisions.</li>
     </ul>
