@@ -27,7 +27,11 @@ export function SetupNeededPage() {
 
 export function LoginPage() {
   const [busy, setBusy] = useState(false);
-  const signIn = async () => {
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const signInWithGoogle = async () => {
     setBusy(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -38,15 +42,96 @@ export function LoginPage() {
       setBusy(false);
     }
   };
+
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !password) return;
+    setBusy(true);
+
+    try {
+      if (mode === "signin") {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (error) throw error;
+        toast.success("Signed in successfully");
+      } else {
+        const { error, data } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+        });
+        if (error) throw error;
+        if (data.session) {
+          toast.success("Account created and signed in!");
+        } else {
+          toast.success("Account created! Please check your email to confirm, or sign in if confirmation is disabled.");
+          setMode("signin");
+        }
+      }
+    } catch (err: unknown) {
+      toast.error(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Centered>
       <Card className="text-center">
         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand text-lg font-bold text-white">TC</div>
         <h1 className="text-xl font-bold">Training Camp</h1>
         <p className="mb-5 mt-1 text-sm text-ink-soft">Private site for camp players and coaches.</p>
-        <Button className="w-full" onClick={signIn} disabled={busy}>
+
+        {/* Email / Password Form */}
+        <form onSubmit={handleEmailAuth} className="space-y-3 text-left mb-4">
+          <Field label="Email">
+            <Input
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@gmail.com"
+            />
+          </Field>
+          <Field label="Password">
+            <Input
+              type="password"
+              required
+              minLength={6}
+              autoComplete={mode === "signin" ? "current-password" : "new-password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+            />
+          </Field>
+
+          <Button type="submit" className="w-full" disabled={busy}>
+            {busy ? "Working…" : mode === "signin" ? "Sign in with password" : "Create password & sign up"}
+          </Button>
+
+          <div className="flex items-center justify-between text-xs pt-1">
+            <button
+              type="button"
+              onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+              className="text-brand font-semibold hover:underline"
+            >
+              {mode === "signin" ? "First time? Set a password" : "Already have a password? Sign in"}
+            </button>
+          </div>
+        </form>
+
+        <div className="relative my-4 flex items-center justify-center">
+          <div className="border-t border-line w-full" />
+          <span className="bg-surface px-2 text-[11px] font-medium text-ink-soft uppercase absolute">or</span>
+        </div>
+
+        {/* Google OAuth fallback */}
+        <Button variant="secondary" className="w-full" onClick={signInWithGoogle} disabled={busy}>
           {busy ? "Opening Google…" : "Continue with Google"}
         </Button>
+
         <p className="mt-4 text-xs text-ink-soft">Use the email your camp admin added to the roster.</p>
         <a href={`${import.meta.env.BASE_URL}privacy.html`} className="mt-2 inline-block text-xs font-semibold text-brand">
           Privacy policy
