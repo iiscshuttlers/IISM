@@ -134,7 +134,7 @@ export default function MatchesPage() {
     <div>
       <PageTitle
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <Button
               variant="secondary"
               size="sm"
@@ -142,7 +142,7 @@ export default function MatchesPage() {
               className="flex items-center gap-1.5"
             >
               <Play size={14} className="text-emerald-600 fill-emerald-600" />
-              <span>Live Court</span>
+              <span>Live<span className="hidden sm:inline"> Court</span></span>
             </Button>
 
             {players.length >= 2 && (
@@ -153,7 +153,7 @@ export default function MatchesPage() {
                 className="flex items-center gap-1.5"
               >
                 <Trophy size={14} className="text-amber-500" />
-                <span>Tournaments</span>
+                <span><span className="hidden sm:inline">Tournaments</span><span className="sm:hidden">Tourney</span></span>
               </Button>
             )}
 

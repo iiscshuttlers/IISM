@@ -437,10 +437,10 @@ export function LiveCourtScorer({
               )}
 
               {/* Visual Badminton Court Scoreboard */}
-              <div className="rounded-xl overflow-hidden border-2 border-emerald-700 bg-emerald-800 shadow-md text-white p-4">
+              <div className="rounded-2xl overflow-hidden border-2 border-emerald-700 bg-emerald-800 shadow-lg text-white p-3 sm:p-4">
                 {/* Game Point / Match Point Banner */}
                 {hasBanner && (
-                  <div className="mb-3 text-center">
+                  <div className="mb-2 sm:mb-3 text-center">
                     <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-amber-400 text-amber-950 uppercase tracking-wider shadow animate-pulse">
                       {isDeuce
                         ? `⚡ DEUCE (Must win by 2, sudden death at ${cap})`
@@ -454,7 +454,7 @@ export function LiveCourtScorer({
                 )}
 
                 {/* Court with Vertical Net Divider */}
-                <div className="relative grid grid-cols-2 gap-6 items-center">
+                <div className="relative grid grid-cols-2 gap-3 sm:gap-6 items-center">
                   {/* Vertical Net Divider */}
                   <div className="absolute left-1/2 top-0 bottom-0 -translate-x-1/2 flex flex-col items-center justify-center pointer-events-none z-10">
                     <div className="w-px h-full border-r-2 border-dashed border-emerald-300/40" />
@@ -465,30 +465,30 @@ export function LiveCourtScorer({
 
                   {/* Team A Side */}
                   <div className="text-center space-y-2 z-0">
-                    <p className="font-bold text-sm truncate px-1 text-emerald-100">{team1Name}</p>
+                    <p className="font-bold text-xs sm:text-sm truncate px-1 text-emerald-100">{team1Name}</p>
                     <button
                       type="button"
                       onClick={() => addPoint("A")}
                       title="Tap to add point"
-                      className="w-full text-6xl font-black tabular-nums tracking-tight font-mono py-4 bg-emerald-900/70 hover:bg-emerald-900 rounded-xl border border-emerald-500/40 active:scale-95 transition cursor-pointer"
+                      className="w-full text-5xl sm:text-6xl font-black tabular-nums tracking-tight font-mono py-3 sm:py-4 bg-emerald-900/70 hover:bg-emerald-900 rounded-xl border border-emerald-500/40 active:scale-95 transition cursor-pointer"
                     >
                       {scoreA}
                     </button>
-                    <div className="flex gap-2">
+                    <div className="flex gap-1.5 sm:gap-2">
                       <button
                         type="button"
                         disabled={scoreA === 0}
                         onClick={() => subPoint("A")}
                         title="Subtract 1 point"
                         aria-label="Subtract 1 point from Team 1"
-                        className="px-3.5 py-3 rounded-xl bg-emerald-950/70 hover:bg-emerald-950 border border-emerald-600/50 text-emerald-200 font-black text-sm shadow active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                        className="px-2.5 sm:px-3.5 py-2.5 sm:py-3 rounded-xl bg-emerald-950/70 hover:bg-emerald-950 border border-emerald-600/50 text-emerald-200 font-black text-sm shadow active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
                       >
                         -1
                       </button>
                       <button
                         type="button"
                         onClick={() => addPoint("A")}
-                        className="flex-1 py-3 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-base shadow active:scale-95 transition cursor-pointer"
+                        className="flex-1 py-2.5 sm:py-3 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-sm sm:text-base shadow active:scale-95 transition cursor-pointer"
                       >
                         +1 Point
                       </button>
@@ -497,30 +497,30 @@ export function LiveCourtScorer({
 
                   {/* Team B Side */}
                   <div className="text-center space-y-2 z-0">
-                    <p className="font-bold text-sm truncate px-1 text-emerald-100">{team2Name}</p>
+                    <p className="font-bold text-xs sm:text-sm truncate px-1 text-emerald-100">{team2Name}</p>
                     <button
                       type="button"
                       onClick={() => addPoint("B")}
                       title="Tap to add point"
-                      className="w-full text-6xl font-black tabular-nums tracking-tight font-mono py-4 bg-emerald-900/70 hover:bg-emerald-900 rounded-xl border border-emerald-500/40 active:scale-95 transition cursor-pointer"
+                      className="w-full text-5xl sm:text-6xl font-black tabular-nums tracking-tight font-mono py-3 sm:py-4 bg-emerald-900/70 hover:bg-emerald-900 rounded-xl border border-emerald-500/40 active:scale-95 transition cursor-pointer"
                     >
                       {scoreB}
                     </button>
-                    <div className="flex gap-2">
+                    <div className="flex gap-1.5 sm:gap-2">
                       <button
                         type="button"
                         disabled={scoreB === 0}
                         onClick={() => subPoint("B")}
                         title="Subtract 1 point"
                         aria-label="Subtract 1 point from Team 2"
-                        className="px-3.5 py-3 rounded-xl bg-emerald-950/70 hover:bg-emerald-950 border border-emerald-600/50 text-emerald-200 font-black text-sm shadow active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                        className="px-2.5 sm:px-3.5 py-2.5 sm:py-3 rounded-xl bg-emerald-950/70 hover:bg-emerald-950 border border-emerald-600/50 text-emerald-200 font-black text-sm shadow active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
                       >
                         -1
                       </button>
                       <button
                         type="button"
                         onClick={() => addPoint("B")}
-                        className="flex-1 py-3 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-base shadow active:scale-95 transition cursor-pointer"
+                        className="flex-1 py-2.5 sm:py-3 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-sm sm:text-base shadow active:scale-95 transition cursor-pointer"
                       >
                         +1 Point
                       </button>

@@ -43,7 +43,20 @@ createRoot(document.getElementById("root")!).render(
       <SessionProvider>
         <App />
         <UpdatePrompt />
-        <Toaster position="top-center" richColors />
+        <Toaster
+          position="top-center"
+          richColors
+          closeButton
+          toastOptions={{
+            style: {
+              borderRadius: "14px",
+              fontFamily: "var(--font-sans)",
+              fontSize: "13px",
+              padding: "12px 16px",
+            },
+            className: "shadow-2xl border border-line",
+          }}
+        />
       </SessionProvider>
     </PersistQueryClientProvider>
   </StrictMode>,

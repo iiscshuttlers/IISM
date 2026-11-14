@@ -96,8 +96,8 @@ export default function StandingsPage() {
       ) : rows.length === 0 ? (
         <Empty>{search ? "No players match your search." : "No players yet."}</Empty>
       ) : (
-        <Card className="overflow-x-auto !p-0">
-          <table className="w-full text-sm">
+        <Card className="overflow-x-auto !p-0 shadow-sm border border-line/80">
+          <table className="w-full min-w-[480px] text-sm">
             <thead className="bg-surface-2 text-xs text-ink-soft">
               <tr>
                 <th className="px-3 py-2 text-left">#</th>

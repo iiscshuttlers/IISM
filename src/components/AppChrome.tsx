@@ -82,6 +82,8 @@ export function SyncEngine({ campId }: { campId: string }) {
       .channel(`camp-${campId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "matches", filter: `camp_id=eq.${campId}` },
         () => schedule("matches", "standings", "activity"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "activity", filter: `camp_id=eq.${campId}` },
+        () => schedule("activity"))
       .on("postgres_changes", { event: "*", schema: "public", table: "sessions", filter: `camp_id=eq.${campId}` },
         () => schedule("sessions"))
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance" }, () => schedule("attendance"))

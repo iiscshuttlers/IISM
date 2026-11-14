@@ -80,10 +80,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     isAdmin: role.data === "admin",
     loading: authLoading || (!!userId && (me.isLoading || (hasProfile && (camps.isLoading || siteAdmin.isLoading || (!!camp && role.isLoading))))),
     signOut: async () => {
-      const unsent = outbox.all().filter((i) => !i.error).length;
-      if (unsent && !window.confirm(`${unsent} match result${unsent === 1 ? " is" : "s are"} still waiting to send. Signing out deletes ${unsent === 1 ? "it" : "them"} from this phone. Sign out anyway?`)) {
-        return;
-      }
       await supabase.auth.signOut();
       // Nothing from this account stays on a shared phone.
       outbox.clear();

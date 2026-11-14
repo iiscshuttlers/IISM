@@ -193,7 +193,7 @@ export function PairingHelperModal({
         className="flex items-center gap-1.5"
       >
         <Sparkles size={15} className="text-amber-500" />
-        <span>Who plays next?</span>
+        <span><span className="hidden sm:inline">Who plays next?</span><span className="sm:hidden">Pairings</span></span>
       </Button>
 
       <Sheet open={open} onClose={() => setOpen(false)} title="Pairing Suggester">
