@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { CheckCheck, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
 import { useAttendance, useDrills, useMembers, useSessions, useTrainingMutations } from "../lib/api";
 import { errorText } from "../lib/supabase";
 import { Badge, Button, Card, Empty, Field, Input, PageTitle, Select, Sheet, Textarea, cx, fmtDate, today } from "../components/ui";
+import { DrillTemplatesSheet, type DrillTemplate } from "../components/DrillTemplates";
 import { DRILL_TYPES, type Attendance, type Drill, type DrillType, type Session } from "../lib/types";
 
 export default function TrainingPage() {
@@ -116,6 +117,7 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
 }) {
   const [drill, setDrill] = useState({ drill_name: "", drill_type: "footwork" as DrillType, duration_min: "", sets: "", reps: "", intensity: "3", notes: "" });
   const [editing, setEditing] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
   const num = (x: string) => (x.trim() ? Number(x) : null);
   const onErr = (e: unknown) => toast.error(errorText(e));
 
@@ -127,6 +129,32 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
       rpe: patch.rpe !== undefined ? patch.rpe : cur?.rpe ?? null,
       note: cur?.note ?? null,
     }, { onError: onErr });
+  };
+
+  const markAllPresent = () => {
+    for (const p of players) {
+      const cur = attendance.find((a) => a.person_id === p.id);
+      if (cur?.status !== "present") {
+        mark(p.id, { status: "present" });
+      }
+    }
+    toast.success("Marked all players present");
+  };
+
+  const handleSelectTemplate = (t: DrillTemplate) => {
+    mut.addDrill.mutate({
+      session_id: session.id,
+      drill_name: t.name,
+      drill_type: t.type,
+      duration_min: t.duration,
+      sets: t.sets,
+      reps: t.reps,
+      intensity: t.intensity,
+      notes: t.notes,
+    }, {
+      onSuccess: () => toast.success(`Added "${t.name}"`),
+      onError: onErr,
+    });
   };
 
   return (
@@ -154,8 +182,14 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
       )}
 
       <section>
-        <h3 className="mb-2 text-sm font-bold">Drills</h3>
-        {drills.length === 0 && <p className="mb-2 text-sm text-ink-soft">No drills yet.</p>}
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-sm font-bold">Drills</h3>
+          <Button size="sm" variant="secondary" onClick={() => setShowTemplates(true)}>
+            <Sparkles size={14} className="text-amber-500 mr-1" />
+            Routine templates
+          </Button>
+        </div>
+        {drills.length === 0 && <p className="mb-2 text-sm text-ink-soft">No drills yet. Pick a routine above or create one below.</p>}
         <div className="space-y-1.5">
           {drills.map((d) => (
             <div key={d.id} className="flex items-start gap-2 rounded-lg bg-surface-2 px-3 py-2">
@@ -205,7 +239,13 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
       </section>
 
       <section>
-        <h3 className="mb-1 text-sm font-bold">Attendance & effort</h3>
+        <div className="mb-1 flex items-center justify-between">
+          <h3 className="text-sm font-bold">Attendance & effort</h3>
+          <Button size="sm" variant="secondary" onClick={markAllPresent}>
+            <CheckCheck size={14} className="mr-1 text-brand" />
+            Mark all present
+          </Button>
+        </div>
         <p className="mb-2 text-xs text-ink-soft">P present · L late · A absent. RPE = how hard it felt (1–10).</p>
         <div className="divide-y divide-line rounded-lg border border-line">
           {players.map((p) => {
@@ -236,6 +276,12 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
           })}
         </div>
       </section>
+
+      <DrillTemplatesSheet
+        open={showTemplates}
+        onClose={() => setShowTemplates(false)}
+        onSelect={handleSelectTemplate}
+      />
     </div>
   );
 }

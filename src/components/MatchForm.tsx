@@ -8,7 +8,7 @@ import { errorText } from "../lib/supabase";
 
 const emptyRows = () => [{ a: "", b: "" }, { a: "", b: "" }, { a: "", b: "" }];
 
-export function MatchForm({ players, initial, submitLabel, onSubmit, busy, lockPlayers = false }: {
+export function MatchForm({ players, initial, submitLabel, onSubmit, busy, lockPlayers = false, initialCategory, initialSlots }: {
   players: Member[];
   initial?: Match;
   submitLabel: string;
@@ -16,11 +16,13 @@ export function MatchForm({ players, initial, submitLabel, onSubmit, busy, lockP
   busy: boolean;
   /** Only scores and winner are editable (used when a coach resolves a dispute). */
   lockPlayers?: boolean;
+  initialCategory?: Category;
+  initialSlots?: (string | null)[];
 }) {
-  const [category, setCategory] = useState<Category>(initial?.category ?? "MS");
+  const [category, setCategory] = useState<Category>(initial?.category ?? initialCategory ?? "MS");
   const [playedOn, setPlayedOn] = useState(initial?.played_on ?? today());
   const [slots, setSlots] = useState<(string | null)[]>(
-    initial ? [initial.t1_p1, initial.t1_p2, initial.t2_p1, initial.t2_p2] : [null, null, null, null],
+    initial ? [initial.t1_p1, initial.t1_p2, initial.t2_p1, initial.t2_p2] : initialSlots ?? [null, null, null, null],
   );
   const [rows, setRows] = useState(() => {
     const r = emptyRows();
@@ -107,7 +109,42 @@ export function MatchForm({ players, initial, submitLabel, onSubmit, busy, lockP
       </div>
 
       <div>
-        <p className="mb-1 text-xs font-semibold text-ink-soft">Game scores (optional, A–B)</p>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-xs font-semibold text-ink-soft">Game scores (optional, A–B)</p>
+          <button
+            type="button"
+            onClick={() => setRows(emptyRows())}
+            className="text-[11px] text-ink-soft hover:text-red-500"
+          >
+            Clear scores
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
+          <span className="text-[10px] uppercase font-bold text-ink-soft">Presets:</span>
+          <button
+            type="button"
+            onClick={() => setRows([{ a: "21", b: "18" }, { a: "21", b: "16" }, { a: "", b: "" }])}
+            className="px-1.5 py-0.5 rounded bg-surface-2 hover:bg-surface-3 text-[11px] text-ink font-mono border border-line"
+          >
+            21-18, 21-16
+          </button>
+          <button
+            type="button"
+            onClick={() => setRows([{ a: "21", b: "15" }, { a: "18", b: "21" }, { a: "21", b: "17" }])}
+            className="px-1.5 py-0.5 rounded bg-surface-2 hover:bg-surface-3 text-[11px] text-ink font-mono border border-line"
+          >
+            21-15, 18-21, 21-17
+          </button>
+          <button
+            type="button"
+            onClick={() => setRows([{ a: "21", b: "19" }, { a: "", b: "" }, { a: "", b: "" }])}
+            className="px-1.5 py-0.5 rounded bg-surface-2 hover:bg-surface-3 text-[11px] text-ink font-mono border border-line"
+          >
+            1 game (21-19)
+          </button>
+        </div>
+
         <div className="space-y-2">
           {rows.map((r, i) => (
             <div key={i} className="flex items-center gap-2">

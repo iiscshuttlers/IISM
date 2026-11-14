@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
-import { useMatchMutations, useMatches, useMembers } from "../lib/api";
+import { useMatchMutations, useMatches, useMembers, useStandings } from "../lib/api";
 import { errorText } from "../lib/supabase";
 import { MatchForm } from "../components/MatchForm";
 import { MatchCard } from "../components/MatchCard";
+import { PairingHelperModal } from "../components/PairingHelper";
 import { Button, Empty, Field, PageTitle, Segmented, Sheet, Textarea } from "../components/ui";
+import type { Category } from "../lib/scores";
 import type { Match } from "../lib/types";
 
 export default function MatchesPage() {
@@ -14,9 +16,11 @@ export default function MatchesPage() {
   const campId = s.camp!.id;
   const matches = useMatches(campId);
   const members = useMembers(campId);
+  const standings = useStandings(campId);
   const mut = useMatchMutations(campId);
   const [filter, setFilter] = useState<"all" | "mine" | "disputed">("all");
   const [recording, setRecording] = useState(false);
+  const [prefill, setPrefill] = useState<{ category: Category; slots: (string | null)[] } | null>(null);
   const [editing, setEditing] = useState<Match | null>(null);
   const [disputing, setDisputing] = useState<Match | null>(null);
   const [resolving, setResolving] = useState<Match | null>(null);
@@ -38,7 +42,33 @@ export default function MatchesPage() {
 
   return (
     <div>
-      <PageTitle action={<Button onClick={() => setRecording(true)}><Plus size={16} /> Record</Button>}>Matches</PageTitle>
+      <PageTitle
+        action={
+          <div className="flex items-center gap-2">
+            {players.length >= 2 && (
+              <PairingHelperModal
+                players={players}
+                matches={matches.data ?? []}
+                standings={standings.data ?? []}
+                onSelectMatch={(cat, slots) => {
+                  setPrefill({ category: cat, slots });
+                  setRecording(true);
+                }}
+              />
+            )}
+            <Button
+              onClick={() => {
+                setPrefill(null);
+                setRecording(true);
+              }}
+            >
+              <Plus size={16} /> Record
+            </Button>
+          </div>
+        }
+      >
+        Matches
+      </PageTitle>
       {!s.camp!.players_see_all_results && !s.isStaff && (
         <p className="mb-3 text-xs text-ink-soft">The camp admin has limited this view to your own matches.</p>
       )}
@@ -67,12 +97,24 @@ export default function MatchesPage() {
         </div>
       )}
 
-      <Sheet open={recording} onClose={() => setRecording(false)} title="Record match">
+      <Sheet open={recording} onClose={() => { setRecording(false); setPrefill(null); }} title="Record match">
         {players.length < 2 ? (
           <Empty>Add players in Settings first.</Empty>
         ) : (
-          <MatchForm players={players} submitLabel="Save match" busy={mut.record.isPending}
-            onSubmit={async (m) => { await mut.record.mutateAsync(m); toast.success("Match recorded"); setRecording(false); }} />
+          <MatchForm
+            key={prefill ? `${prefill.category}-${prefill.slots.join(",")}` : "fresh"}
+            players={players}
+            initialCategory={prefill?.category}
+            initialSlots={prefill?.slots}
+            submitLabel="Save match"
+            busy={mut.record.isPending}
+            onSubmit={async (m) => {
+              await mut.record.mutateAsync(m);
+              toast.success("Match recorded");
+              setRecording(false);
+              setPrefill(null);
+            }}
+          />
         )}
       </Sheet>
 

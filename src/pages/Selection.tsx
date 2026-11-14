@@ -4,10 +4,11 @@ import { Lock, Unlock } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
 import {
-  useAssessments, useAttendance, useDrills, useMembers, useSelection, useSessions, useStaffMutations, useStandings,
+  useAssessments, useAttendance, useDrills, useMatches, useMembers, useSelection, useSessions, useStaffMutations, useStandings,
 } from "../lib/api";
 import { errorText } from "../lib/supabase";
 import { Badge, Button, Card, Field, Input, PageTitle, Segmented, Select, Sheet, Textarea, cx, fmtDate, today } from "../components/ui";
+import { PlayerDetailSheet } from "../components/PlayerDetail";
 import type { SelectionRow } from "../lib/types";
 
 type Decision = SelectionRow["decision"];
@@ -17,6 +18,7 @@ export default function SelectionPage() {
   const camp = s.camp!;
   const members = useMembers(camp.id);
   const standings = useStandings(camp.id);
+  const matches = useMatches(camp.id);
   const sessions = useSessions(camp.id);
   const ids = (sessions.data ?? []).map((x) => x.id);
   const drills = useDrills(ids);
@@ -25,7 +27,9 @@ export default function SelectionPage() {
   const selection = useSelection(camp.id, true);
   const mut = useStaffMutations(camp.id);
   const [gender, setGender] = useState<"all" | "M" | "F">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "selected" | "standby" | "not_selected" | "undecided">("all");
   const [assessing, setAssessing] = useState<string | null>(null);
+  const [inspectingPlayer, setInspectingPlayer] = useState<string | null>(null);
   const [unlocking, setUnlocking] = useState(false);
   const [unlockReason, setUnlockReason] = useState("");
   const locked = !!camp.selection_locked_at;
@@ -60,7 +64,13 @@ export default function SelectionPage() {
     }).sort((a, b) => b.rating - a.rating);
   }, [members.data, standings.data, sessions.data, drills.data, attendance.data, assessments.data, selection.data]);
 
-  const rows = board.filter((r) => gender === "all" || r.gender === gender);
+  const rows = board
+    .filter((r) => gender === "all" || r.gender === gender)
+    .filter((r) => {
+      if (statusFilter === "all") return true;
+      if (statusFilter === "undecided") return !r.decision;
+      return r.decision === statusFilter;
+    });
   const selectedCount = board.filter((r) => r.decision === "selected").length;
   const selectedM = board.filter((r) => r.decision === "selected" && r.gender === "M").length;
   const selectedF = board.filter((r) => r.decision === "selected" && r.gender === "F").length;
@@ -79,23 +89,54 @@ export default function SelectionPage() {
               disabled={!s.isAdmin || mut.lock.isPending}><Lock size={16} /> Lock squad</Button>
       }>Selection</PageTitle>
 
-      <Card className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-        <span className={cx("font-bold", selectedCount === camp.selection_target ? "text-brand" : "text-ink")}>
-          {selectedCount} / {camp.selection_target} selected
-        </span>
-        <span className="text-ink-soft">{selectedM} men · {selectedF} women</span>
-        {locked
-          ? <Badge tone="good">Locked {fmtDate(camp.selection_locked_at!.slice(0, 10))}{camp.publish_selection ? " · published" : " · not published"}</Badge>
-          : <Badge>Draft — only staff can see this</Badge>}
-        {!s.isAdmin && <span className="text-xs text-ink-soft">Only the camp admin can lock or unlock.</span>}
-        {s.isAdmin && locked && !camp.publish_selection && (
-          <Link href="/settings" className="text-xs font-semibold text-brand">Publish to players in Settings</Link>
-        )}
+      <Card className="mb-3 space-y-2 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-3">
+            <span className={cx("font-bold text-base", selectedCount === camp.selection_target ? "text-brand" : "text-ink")}>
+              {selectedCount} / {camp.selection_target} selected
+            </span>
+            <span className="text-xs text-ink-soft">({selectedM} men · {selectedF} women)</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {locked
+              ? <Badge tone="good">Locked {fmtDate(camp.selection_locked_at!.slice(0, 10))}{camp.publish_selection ? " · published" : " · not published"}</Badge>
+              : <Badge>Draft — only staff can see this</Badge>}
+            {s.isAdmin && locked && !camp.publish_selection && (
+              <Link href="/settings" className="text-xs font-semibold text-brand hover:underline">Publish to players</Link>
+            )}
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <div className="w-full bg-surface-2 rounded-full h-2 overflow-hidden">
+          <div
+            className={`h-full transition-all duration-300 ${
+              selectedCount === camp.selection_target ? "bg-brand" : selectedCount > camp.selection_target ? "bg-red-500" : "bg-brand/70"
+            }`}
+            style={{ width: `${Math.min(100, (selectedCount / camp.selection_target) * 100)}%` }}
+          />
+        </div>
       </Card>
 
-      <div className="mb-3">
-        <Segmented value={gender} onChange={setGender}
-          options={[{ value: "all", label: "All" }, { value: "M", label: "Men" }, { value: "F", label: "Women" }]} />
+      <div className="mb-3 flex flex-col sm:flex-row gap-2">
+        <div className="w-full sm:w-48">
+          <Segmented value={gender} onChange={setGender}
+            options={[{ value: "all", label: "All" }, { value: "M", label: "Men" }, { value: "F", label: "Women" }]} />
+        </div>
+        <div className="flex-1 overflow-x-auto">
+          <Segmented
+            value={statusFilter}
+            onChange={(v) => setStatusFilter(v as typeof statusFilter)}
+            options={[
+              { value: "all", label: "All Status" },
+              { value: "selected", label: `Selected (${selectedCount})` },
+              { value: "standby", label: `Standby (${board.filter(b => b.decision === "standby").length})` },
+              { value: "not_selected", label: "Not selected" },
+              { value: "undecided", label: "Undecided" },
+            ]}
+          />
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -103,7 +144,14 @@ export default function SelectionPage() {
           <Card key={r.id} className={cx(r.decision === "selected" && "border-brand/60")}>
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="font-semibold">{r.full_name} {r.gender && <span className="text-xs text-ink-soft">({r.gender})</span>}</p>
+                <button
+                  type="button"
+                  onClick={() => setInspectingPlayer(r.id)}
+                  className="font-semibold text-ink hover:text-brand transition-colors text-left flex items-center gap-1.5"
+                >
+                  <span>{r.full_name}</span>
+                  {r.gender && <span className="text-xs text-ink-soft">({r.gender})</span>}
+                </button>
                 <div className="mt-1 grid grid-cols-3 gap-x-4 gap-y-0.5 text-xs text-ink-soft sm:grid-cols-6">
                   <span>Rating <b className="text-ink">{r.rating}</b></span>
                   <span>Win <b className="text-ink">{r.winPct != null ? `${r.winPct}%` : "—"}</b> ({r.played})</span>
@@ -156,6 +204,17 @@ export default function SelectionPage() {
           </Button>
         </div>
       </Sheet>
+
+      <PlayerDetailSheet
+        personId={inspectingPlayer}
+        onClose={() => setInspectingPlayer(null)}
+        members={members.data ?? []}
+        standings={standings.data ?? []}
+        matches={matches.data ?? []}
+        attendance={attendance.data ?? []}
+        assessments={assessments.data ?? []}
+        isStaff={true}
+      />
     </div>
   );
 }

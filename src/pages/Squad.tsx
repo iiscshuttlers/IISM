@@ -1,3 +1,4 @@
+import { Trophy } from "lucide-react";
 import { useSession } from "../lib/session";
 import { useSquad } from "../lib/api";
 import { Badge, Card, Empty, PageTitle } from "../components/ui";
@@ -11,6 +12,9 @@ export default function SquadPage() {
   const selected = rows.filter((r) => r.decision === "selected");
   const standby = rows.filter((r) => r.decision === "standby");
 
+  const isMeSelected = selected.some((r) => r.person_id === s.meId);
+  const isMeStandby = standby.some((r) => r.person_id === s.meId);
+
   if (squad.isLoading) return <p className="text-sm text-ink-soft">Loading…</p>;
   if (!published && !s.isStaff) {
     return (
@@ -21,30 +25,59 @@ export default function SquadPage() {
     );
   }
   return (
-    <div>
+    <div className="space-y-4">
       <PageTitle>Squad</PageTitle>
       {s.isStaff && !published && (
-        <p className="mb-3 text-xs text-ink-soft">Preview: players can't see this until you lock and publish the squad.</p>
+        <p className="mb-2 text-xs text-ink-soft">Preview: players can't see this until you lock and publish the squad in Settings.</p>
       )}
-      <Card className="mb-3">
+
+      {/* Celebratory badge for selected players */}
+      {isMeSelected && (
+        <Card className="border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-surface to-emerald-500/5">
+          <div className="flex items-center gap-2 font-bold text-sm text-emerald-800">
+            <Trophy size={18} className="text-emerald-600" />
+            <span>Congratulations! You made the squad</span>
+          </div>
+          <p className="text-xs text-ink-soft mt-1">
+            You have been officially selected to represent the IISc Badminton Team.
+          </p>
+        </Card>
+      )}
+
+      {isMeStandby && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <p className="font-semibold text-sm text-amber-900">You are on the Standby roster</p>
+          <p className="text-xs text-ink-soft mt-0.5">Stay match-ready and keep up training sessions.</p>
+        </Card>
+      )}
+
+      <Card>
         <h2 className="mb-2 text-sm font-bold">Selected ({selected.length})</h2>
         {selected.length === 0 ? <p className="text-sm text-ink-soft">None yet.</p> : (
-          <ul className="space-y-1">
+          <ul className="space-y-1.5">
             {selected.map((r) => (
-              <li key={r.person_id} className="flex items-center justify-between text-sm">
-                <span className="font-semibold">{r.full_name}{r.person_id === s.meId && " (you)"}</span>
-                {r.gender && <Badge>{r.gender === "M" ? "Men" : "Women"}</Badge>}
+              <li key={r.person_id} className="flex items-center justify-between text-sm py-1 border-b border-line/50 last:border-0">
+                <span className="font-semibold text-ink">
+                  {r.full_name}{r.person_id === s.meId && <span className="text-brand font-bold ml-1.5">(You)</span>}
+                </span>
+                {r.gender && <Badge tone="brand">{r.gender === "M" ? "Men" : "Women"}</Badge>}
               </li>
             ))}
           </ul>
         )}
       </Card>
+
       {standby.length > 0 && (
         <Card>
           <h2 className="mb-2 text-sm font-bold">Standby ({standby.length})</h2>
-          <ul className="space-y-1">
+          <ul className="space-y-1.5">
             {standby.map((r) => (
-              <li key={r.person_id} className="text-sm">{r.full_name}{r.person_id === s.meId && " (you)"}</li>
+              <li key={r.person_id} className="flex items-center justify-between text-sm py-1 border-b border-line/50 last:border-0">
+                <span className="text-ink">
+                  {r.full_name}{r.person_id === s.meId && <span className="text-amber-600 font-bold ml-1.5">(You)</span>}
+                </span>
+                {r.gender && <Badge>{r.gender === "M" ? "Men" : "Women"}</Badge>}
+              </li>
             ))}
           </ul>
         </Card>
