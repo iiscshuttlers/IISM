@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
-import { Sparkles, ArrowRight } from "lucide-react";
-import { Button, Card, Segmented, Sheet } from "./ui";
+import { Sparkles, ArrowRight, BatteryCharging, Clock } from "lucide-react";
+import { Avatar, Button, Card, Segmented, Sheet } from "./ui";
 import { CATEGORIES, isSingles, type Category } from "../lib/scores";
 import type { Member, Match, Standing } from "../lib/types";
 import { history, suggestionScore, timesMet } from "../lib/insights";
@@ -13,6 +13,8 @@ interface SuggestedPairing {
   team2Rating: number;
   ratingDiff: number;
   reason: string;
+  hasBackToBack?: boolean;
+  allFresh?: boolean;
 }
 
 export function PairingHelperModal({
@@ -45,6 +47,16 @@ export function PairingHelperModal({
     }
     return counts;
   }, [players, matches]);
+
+  // Fatigue Guard: Most recent confirmed match participants
+  const lastMatchPlayerIds = useMemo(() => {
+    const confirmedMatches = matches
+      .filter((m) => m.status === "confirmed")
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const last = confirmedMatches[0];
+    if (!last) return new Set<string>();
+    return new Set([last.t1_p1, last.t1_p2, last.t2_p1, last.t2_p2].filter(Boolean) as string[]);
+  }, [matches]);
 
   const suggestions = useMemo<SuggestedPairing[]>(() => {
     const singles = isSingles(selectedCat);
@@ -157,20 +169,29 @@ export function PairingHelperModal({
       }
     }
 
-    // Rank by closeness, least court time and fresh match-ups (see lib/insights suggestionScore).
+    // Rank by closeness, least court time, fresh match-ups and Fatigue Guard
     const ids = (t: Member[]) => t.map((p) => p.id);
     return list
       .map((p) => {
+        const participantIds = [...ids(p.team1), ...ids(p.team2)];
+        const hasBackToBack = participantIds.some((id) => lastMatchPlayerIds.has(id));
+        const allFresh = participantIds.every((id) => (playCounts.get(id) ?? 0) === 0);
         const met = timesMet(hist, ids(p.team1), ids(p.team2));
+        const baseScore = suggestionScore(hist, ids(p.team1), ids(p.team2), getRating);
+        // Penalize back-to-back pairings so rested players get prioritized, reward fresh players
+        const score = baseScore + (hasBackToBack ? 30 : 0) - (allFresh ? 12 : 0);
+
         return {
           ...p,
-          score: suggestionScore(hist, ids(p.team1), ids(p.team2), getRating),
+          hasBackToBack,
+          allFresh,
+          score,
           reason: met === 0 ? `New match-up · ${p.reason}` : p.reason,
         };
       })
       .sort((a, b) => a.score - b.score)
       .slice(0, 4);
-  }, [selectedCat, players, matches, playCounts, ratingMap, hist]);
+  }, [selectedCat, players, matches, playCounts, ratingMap, hist, lastMatchPlayerIds]);
 
   const handlePick = (pairing: SuggestedPairing) => {
     const singles = isSingles(pairing.category);
@@ -196,10 +217,10 @@ export function PairingHelperModal({
         <span><span className="hidden sm:inline">Who plays next?</span><span className="sm:hidden">Pairings</span></span>
       </Button>
 
-      <Sheet open={open} onClose={() => setOpen(false)} title="Pairing Suggester">
+      <Sheet open={open} onClose={() => setOpen(false)} title="Pairing Suggester & Fatigue Guard">
         <div className="space-y-4">
           <p className="text-xs text-ink-soft">
-            Ranks match-ups that are close on rating, give court time to whoever has played least, and haven't been seen yet — each one tells the coaches something new.
+            Ranks match-ups that balance rating, give court time to whoever has played least, and protects players from back-to-back fatigue.
           </p>
 
           <div>
@@ -211,7 +232,7 @@ export function PairingHelperModal({
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {suggestions.length === 0 ? (
               <div className="p-4 text-center text-sm text-ink-soft border border-dashed border-line rounded-lg">
                 Not enough eligible players with matching gender to form a {selectedCat} match.
@@ -219,32 +240,58 @@ export function PairingHelperModal({
             ) : (
               suggestions.map((s, idx) => (
                 <Card key={idx} className="hover:border-brand/40 transition-colors">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-brand px-1.5 py-0.5 rounded bg-brand/10">
-                      {s.category}
-                    </span>
-                    <span className="text-[11px] text-ink-soft font-medium">{s.reason}</span>
+                  <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-brand px-1.5 py-0.5 rounded bg-brand/10">
+                        {s.category}
+                      </span>
+                      {s.hasBackToBack && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25">
+                          <Clock size={10} /> Back-to-back
+                        </span>
+                      )}
+                      {s.allFresh && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
+                          <BatteryCharging size={10} /> Fresh
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-ink-soft font-medium truncate max-w-[180px]">{s.reason}</span>
                   </div>
 
-                  <div className="flex items-center justify-between py-1 text-sm">
-                    <div className="flex-1">
-                      <p className="font-semibold text-ink">{s.team1.map((p) => p.full_name).join(" & ")}</p>
-                      <p className="text-[11px] text-ink-soft">
+                  <div className="flex items-center justify-between py-1 text-sm gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="space-y-1">
+                        {s.team1.map((p) => (
+                          <div key={p.id} className="flex items-center gap-1.5">
+                            <Avatar name={p.full_name} size="xs" />
+                            <span className="font-semibold text-ink text-xs sm:text-sm truncate">{p.full_name}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-ink-soft mt-1">
                         Played: {s.team1.map((p) => playCounts.get(p.id) ?? 0).join(" & ")}
                       </p>
                     </div>
 
-                    <div className="px-3 text-xs font-bold text-ink-soft">vs</div>
+                    <div className="px-2 text-xs font-bold text-ink-soft shrink-0">vs</div>
 
-                    <div className="flex-1 text-right">
-                      <p className="font-semibold text-ink">{s.team2.map((p) => p.full_name).join(" & ")}</p>
-                      <p className="text-[11px] text-ink-soft">
+                    <div className="flex-1 min-w-0 text-right">
+                      <div className="space-y-1 flex flex-col items-end">
+                        {s.team2.map((p) => (
+                          <div key={p.id} className="flex items-center justify-end gap-1.5 w-full">
+                            <span className="font-semibold text-ink text-xs sm:text-sm truncate">{p.full_name}</span>
+                            <Avatar name={p.full_name} size="xs" />
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-ink-soft mt-1">
                         Played: {s.team2.map((p) => playCounts.get(p.id) ?? 0).join(" & ")}
                       </p>
                     </div>
                   </div>
 
-                  <div className="mt-3 pt-2 border-t border-line flex items-center justify-between">
+                  <div className="mt-3 pt-2 border-t border-line flex items-center justify-between gap-2">
                     <span className="text-xs text-ink-soft font-mono">
                       Rating gap: <strong>{s.ratingDiff} Elo</strong> ({s.team1Rating} vs {s.team2Rating})
                     </span>

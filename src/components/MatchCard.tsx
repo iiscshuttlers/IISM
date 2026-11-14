@@ -1,5 +1,5 @@
 import { Repeat, Share2, Trash2, RotateCcw } from "lucide-react";
-import { Badge, Button, cx, fmtDate } from "./ui";
+import { Avatar, Badge, Button, cx, fmtDate } from "./ui";
 import { CATEGORIES, isSingles } from "../lib/scores";
 import { shareMatchOnWhatsApp } from "../lib/whatsappShare";
 import type { Match, Member } from "../lib/types";
@@ -42,11 +42,24 @@ export function MatchCard({ match: m, people, meId, isStaff, onEdit, onDispute, 
       {[1, 2].map((s) => {
         const won = m.winner_side === s;
         const label = s === 1 ? side(m.t1_p1, m.t1_p2) : side(m.t2_p1, m.t2_p2);
+        const p1 = s === 1 ? m.t1_p1 : m.t2_p1;
+        const p2 = s === 1 ? m.t1_p2 : m.t2_p2;
         return (
-          <div key={s} className="flex items-center justify-between gap-2 py-0.5">
-            <span className={cx("text-sm", won ? "font-bold text-ink" : "text-ink-soft")}>
-              {won && <span className="mr-1 text-brand">●</span>}{label}
-            </span>
+          <div key={s} className="flex items-center justify-between gap-2 py-1">
+            <div className="flex items-center gap-1.5 min-w-0">
+              {won ? (
+                <span className="h-2 w-2 rounded-full bg-brand shrink-0" />
+              ) : (
+                <span className="h-2 w-2 shrink-0" />
+              )}
+              <div className="flex items-center gap-1 min-w-0">
+                {p1 && <Avatar name={name(p1)} size="xs" />}
+                {p2 && !isSingles(m.category) && <Avatar name={name(p2)} size="xs" />}
+                <span className={cx("text-sm truncate", won ? "font-bold text-ink" : "text-ink-soft")}>
+                  {label}
+                </span>
+              </div>
+            </div>
             {m.games && (
               <span className="flex gap-2 font-mono text-sm tabular-nums">
                 {m.games.map((g, i) => {

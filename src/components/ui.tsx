@@ -28,6 +28,61 @@ export const Card = ({ children, className }: { children: ReactNode; className?:
   <div className={cx("rounded-2xl border border-line/80 bg-surface p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)]", className)}>{children}</div>
 );
 
+const AVATAR_COLORS = [
+  "bg-teal-600 text-white",
+  "bg-indigo-600 text-white",
+  "bg-emerald-600 text-white",
+  "bg-blue-600 text-white",
+  "bg-amber-600 text-white",
+  "bg-purple-600 text-white",
+  "bg-rose-600 text-white",
+  "bg-cyan-600 text-white",
+];
+
+function hashName(name: string): number {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash << 5) - hash + name.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+export function Avatar({
+  name,
+  size = "md",
+  className,
+}: {
+  name: string;
+  size?: "xs" | "sm" | "md" | "lg";
+  className?: string;
+}) {
+  const parts = name.trim().split(/\s+/);
+  const initials =
+    parts.length >= 2
+      ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+      : (parts[0]?.slice(0, 2) || "—").toUpperCase();
+  const color = AVATAR_COLORS[hashName(name) % AVATAR_COLORS.length];
+
+  return (
+    <span
+      className={cx(
+        "inline-flex shrink-0 items-center justify-center rounded-full font-bold select-none tracking-tight shadow-xs",
+        size === "xs" && "h-5 w-5 text-[9px]",
+        size === "sm" && "h-6 w-6 text-[10px]",
+        size === "md" && "h-8 w-8 text-xs",
+        size === "lg" && "h-10 w-10 text-sm",
+        color,
+        className,
+      )}
+      title={name}
+      aria-label={name}
+    >
+      {initials}
+    </span>
+  );
+}
+
 export const Field = ({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) => (
   <label className="block">
     <span className="mb-1 block text-xs font-semibold text-ink-soft">{label}</span>

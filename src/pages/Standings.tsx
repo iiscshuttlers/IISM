@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { ArrowRightLeft, Search } from "lucide-react";
 import { useSession } from "../lib/session";
 import { useAssessments, useAttendance, useMatches, useMembers, useSessions, useStandings } from "../lib/api";
-import { Button, Card, Empty, Input, PageTitle, Segmented, cx } from "../components/ui";
+import { Avatar, Button, Card, Empty, Input, PageTitle, Segmented, cx } from "../components/ui";
 import { CATEGORIES } from "../lib/scores";
 import { confidence } from "../lib/insights";
 import { PlayerDetailSheet } from "../components/PlayerDetail";
@@ -129,15 +129,20 @@ export default function StandingsPage() {
                   >
                     <td className="px-3 py-2.5 text-xs text-ink-soft">{limited ? "—" : i + 1}</td>
                     <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-ink">{r.full_name}</span>
-                        {isMe && <span className="text-[10px] text-brand font-bold">(You)</span>}
+                      <div className="flex items-center gap-2">
+                        <Avatar name={r.full_name} size="sm" />
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-ink">{r.full_name}</span>
+                            {isMe && <span className="text-[10px] text-brand font-bold">(You)</span>}
+                          </div>
+                          <span className="block text-[11px] text-ink-soft">
+                            {CATEGORIES.filter((c) => r.by_category?.[c.value])
+                              .map((c) => `${c.value} ${r.by_category[c.value].w}–${r.by_category[c.value].l}`)
+                              .join(" · ") || "No matches"}
+                          </span>
+                        </div>
                       </div>
-                      <span className="block text-[11px] text-ink-soft">
-                        {CATEGORIES.filter((c) => r.by_category?.[c.value])
-                          .map((c) => `${c.value} ${r.by_category[c.value].w}–${r.by_category[c.value].l}`)
-                          .join(" · ") || "No matches"}
-                      </span>
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums">
                       <span className="font-bold text-brand">{r.rating}</span>

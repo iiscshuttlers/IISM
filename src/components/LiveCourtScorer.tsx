@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Play, RotateCcw, Trophy, Check, Pencil } from "lucide-react";
+import { Play, RotateCcw, Trophy, Check, Pencil, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
-import { Button, Card, ConfirmDialog, Field, Select, Sheet, cx } from "./ui";
+import { Avatar, Button, Card, ConfirmDialog, Field, Select, Sheet, cx } from "./ui";
 import { CATEGORIES, isSingles, slotGenders, type Category } from "../lib/scores";
 import type { Member } from "../lib/types";
 import type { MatchInput } from "../lib/api";
@@ -38,6 +38,18 @@ export function LiveCourtScorer({
   const [scoreLog, setScoreLog] = useState<{ a: number; b: number }[]>([]);
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmFinish, setConfirmFinish] = useState(false);
+  const [endsSwapped, setEndsSwapped] = useState(false);
+  const [servingSide, setServingSide] = useState<"A" | "B">("A");
+
+  const vibrate = (pattern: number | number[] = 35) => {
+    try {
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        navigator.vibrate(pattern);
+      }
+    } catch {
+      // Ignore vibration error on unsupported platforms
+    }
+  };
 
   const setsToWin = matchFormat === "1_set" ? 1 : matchFormat === "best_of_5" ? 3 : 2;
   const deuceAt = enableDeuce ? targetPoints - 1 : targetPoints;
@@ -79,6 +91,8 @@ export function LiveCourtScorer({
   };
 
   const addPoint = (side: "A" | "B") => {
+    vibrate(35);
+    setServingSide(side);
     setScoreLog((prev) => [...prev, { a: scoreA, b: scoreB }]);
     const nextA = side === "A" ? scoreA + 1 : scoreA;
     const nextB = side === "B" ? scoreB + 1 : scoreB;
@@ -95,6 +109,7 @@ export function LiveCourtScorer({
       : nextA >= targetPoints || nextB >= targetPoints;
 
     if (isGameWon) {
+      vibrate([60, 50, 80]);
       const winnerSide = nextA > nextB ? "A" : "B";
       const finalGameScore = `${nextA}-${nextB}`;
       const nextGames = [...gamesHistory, finalGameScore];
@@ -111,9 +126,11 @@ export function LiveCourtScorer({
 
       // Check if match won
       if (nextWinsA === setsToWin || nextWinsB === setsToWin) {
+        vibrate([100, 80, 150]);
         setStep("finished");
       } else {
-        // Next set
+        // Next set - automatically switch ends as per standard rules
+        setEndsSwapped((prev) => !prev);
         setCurrentGame((g) => g + 1);
         setScoreA(0);
         setScoreB(0);
@@ -123,6 +140,7 @@ export function LiveCourtScorer({
   };
 
   const subPoint = (side: "A" | "B") => {
+    vibrate(25);
     if (side === "A" && scoreA > 0) {
       setScoreLog((prev) => [...prev, { a: scoreA, b: scoreB }]);
       setScoreA((a) => a - 1);
@@ -134,6 +152,7 @@ export function LiveCourtScorer({
 
   const undoPoint = () => {
     if (scoreLog.length === 0) return;
+    vibrate(25);
     const last = scoreLog[scoreLog.length - 1];
     setScoreA(last.a);
     setScoreB(last.b);
@@ -376,7 +395,7 @@ export function LiveCourtScorer({
           return (
             <div className="space-y-4">
               {/* Game Status Header */}
-              <div className="flex items-center justify-between text-xs px-2.5 py-1.5 bg-surface-2 rounded-lg">
+              <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs px-2.5 py-1.5 bg-surface-2 rounded-lg">
                 <div className="flex items-center gap-1.5">
                   <span className="font-bold text-brand uppercase">
                     {category} · {matchFormat === "1_set" ? "1 Set Shootout" : matchFormat === "best_of_5" ? `Set ${currentGame} of 5` : `Set ${currentGame} of 3`}
@@ -391,12 +410,28 @@ export function LiveCourtScorer({
                     <Pencil size={10} className="text-ink-soft" />
                   </button>
                 </div>
-                <span className="font-mono text-ink-soft">
-                  Sets: {winsA} – {winsB}
-                </span>
-                {gamesHistory.length > 0 && (
-                  <span className="text-ink-soft font-mono">({gamesHistory.join(", ")})</span>
-                )}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      vibrate(30);
+                      setEndsSwapped((prev) => !prev);
+                      toast.success("Court ends switched");
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface border border-line text-[11px] font-semibold text-ink hover:bg-surface-3 transition cursor-pointer"
+                    title="Switch court ends (swap left and right)"
+                  >
+                    <ArrowLeftRight size={11} className="text-brand" />
+                    <span>Switch ends</span>
+                  </button>
+                  <span className="font-mono text-ink-soft">
+                    Sets: {winsA} – {winsB}
+                  </span>
+                  {gamesHistory.length > 0 && (
+                    <span className="text-ink-soft font-mono">({gamesHistory.join(", ")})</span>
+                  )}
+                </div>
               </div>
 
               {/* In-game quick point target adjustment drawer */}
@@ -463,69 +498,71 @@ export function LiveCourtScorer({
                     </span>
                   </div>
 
-                  {/* Team A Side */}
-                  <div className="text-center space-y-2 z-0">
-                    <p className="font-bold text-xs sm:text-sm truncate px-1 text-emerald-100">{team1Name}</p>
-                    <button
-                      type="button"
-                      onClick={() => addPoint("A")}
-                      title="Tap to add point"
-                      className="w-full text-5xl sm:text-6xl font-black tabular-nums tracking-tight font-mono py-3 sm:py-4 bg-emerald-900/70 hover:bg-emerald-900 rounded-xl border border-emerald-500/40 active:scale-95 transition cursor-pointer"
-                    >
-                      {scoreA}
-                    </button>
-                    <div className="flex gap-1.5 sm:gap-2">
-                      <button
-                        type="button"
-                        disabled={scoreA === 0}
-                        onClick={() => subPoint("A")}
-                        title="Subtract 1 point"
-                        aria-label="Subtract 1 point from Team 1"
-                        className="px-2.5 sm:px-3.5 py-2.5 sm:py-3 rounded-xl bg-emerald-950/70 hover:bg-emerald-950 border border-emerald-600/50 text-emerald-200 font-black text-sm shadow active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
-                      >
-                        -1
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => addPoint("A")}
-                        className="flex-1 py-2.5 sm:py-3 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-sm sm:text-base shadow active:scale-95 transition cursor-pointer"
-                      >
-                        +1 Point
-                      </button>
-                    </div>
-                  </div>
+                  {/* Render sides according to court ends */}
+                  {[endsSwapped ? "B" : "A", endsSwapped ? "A" : "B"].map((side) => {
+                    const isA = side === "A";
+                    const teamName = isA ? team1Name : team2Name;
+                    const score = isA ? scoreA : scoreB;
+                    const isServing = servingSide === side;
+                    const p1 = isA ? slots[0] : slots[2];
+                    const p2 = isA ? slots[1] : slots[3];
 
-                  {/* Team B Side */}
-                  <div className="text-center space-y-2 z-0">
-                    <p className="font-bold text-xs sm:text-sm truncate px-1 text-emerald-100">{team2Name}</p>
-                    <button
-                      type="button"
-                      onClick={() => addPoint("B")}
-                      title="Tap to add point"
-                      className="w-full text-5xl sm:text-6xl font-black tabular-nums tracking-tight font-mono py-3 sm:py-4 bg-emerald-900/70 hover:bg-emerald-900 rounded-xl border border-emerald-500/40 active:scale-95 transition cursor-pointer"
-                    >
-                      {scoreB}
-                    </button>
-                    <div className="flex gap-1.5 sm:gap-2">
-                      <button
-                        type="button"
-                        disabled={scoreB === 0}
-                        onClick={() => subPoint("B")}
-                        title="Subtract 1 point"
-                        aria-label="Subtract 1 point from Team 2"
-                        className="px-2.5 sm:px-3.5 py-2.5 sm:py-3 rounded-xl bg-emerald-950/70 hover:bg-emerald-950 border border-emerald-600/50 text-emerald-200 font-black text-sm shadow active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
-                      >
-                        -1
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => addPoint("B")}
-                        className="flex-1 py-2.5 sm:py-3 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-sm sm:text-base shadow active:scale-95 transition cursor-pointer"
-                      >
-                        +1 Point
-                      </button>
-                    </div>
-                  </div>
+                    return (
+                      <div key={side} className="text-center space-y-2 z-0">
+                        <div className="flex flex-col items-center justify-center gap-1 min-h-[42px]">
+                          <div className="flex items-center justify-center gap-1.5 max-w-full px-1">
+                            {p1 && <Avatar name={nameOf(p1)} size="xs" />}
+                            {p2 && !singles && <Avatar name={nameOf(p2)} size="xs" />}
+                            <p className="font-bold text-xs sm:text-sm truncate text-emerald-100">{teamName}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              vibrate(20);
+                              setServingSide(isA ? "B" : "A");
+                            }}
+                            className={cx(
+                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition cursor-pointer shadow-xs",
+                              isServing
+                                ? "bg-amber-400 text-amber-950 animate-pulse font-black"
+                                : "bg-emerald-950/60 text-emerald-300/70 hover:bg-emerald-900 border border-emerald-600/30"
+                            )}
+                            title="Click to toggle server"
+                          >
+                            🏸 {isServing ? "Serving" : "Receiving"}
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => addPoint(side as "A" | "B")}
+                          title={`Tap to add point to ${teamName}`}
+                          className="w-full text-5xl sm:text-6xl font-black tabular-nums tracking-tight font-mono py-3 sm:py-4 bg-emerald-900/70 hover:bg-emerald-900 rounded-xl border border-emerald-500/40 active:scale-95 transition cursor-pointer"
+                        >
+                          {score}
+                        </button>
+                        <div className="flex gap-1.5 sm:gap-2">
+                          <button
+                            type="button"
+                            disabled={score === 0}
+                            onClick={() => subPoint(side as "A" | "B")}
+                            title={`Subtract 1 point from ${teamName}`}
+                            aria-label={`Subtract 1 point from ${teamName}`}
+                            className="px-2.5 sm:px-3.5 py-2.5 sm:py-3 rounded-xl bg-emerald-950/70 hover:bg-emerald-950 border border-emerald-600/50 text-emerald-200 font-black text-sm shadow active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                          >
+                            -1
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => addPoint(side as "A" | "B")}
+                            className="flex-1 py-2.5 sm:py-3 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-sm sm:text-base shadow active:scale-95 transition cursor-pointer"
+                          >
+                            +1 Point
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* Bottom Actions */}
