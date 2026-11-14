@@ -253,55 +253,80 @@ export function LiveCourtScorer({
 
             {/* Visual Badminton Court Scoreboard */}
             <div className="rounded-xl overflow-hidden border-2 border-emerald-700 bg-emerald-800 shadow-md text-white p-4">
-              <div className="grid grid-cols-2 gap-4 items-center">
+              {/* Game Point / Match Point Banner */}
+              {(scoreA >= 20 || scoreB >= 20) && (
+                <div className="mb-3 text-center">
+                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-amber-400 text-amber-950 uppercase tracking-wider shadow animate-pulse">
+                    {scoreA === scoreB
+                      ? "⚡ DEUCE (Must win by 2, max 30)"
+                      : (winsA === 1 && scoreA > scoreB) || (winsB === 1 && scoreB > scoreA)
+                      ? "🏆 MATCH POINT"
+                      : "🔥 GAME POINT"}
+                  </span>
+                </div>
+              )}
+
+              {/* Court with Vertical Net Divider */}
+              <div className="relative grid grid-cols-2 gap-6 items-center">
+                {/* Vertical Net Divider */}
+                <div className="absolute left-1/2 top-0 bottom-0 -translate-x-1/2 flex flex-col items-center justify-center pointer-events-none z-10">
+                  <div className="w-px h-full border-r-2 border-dashed border-emerald-300/40" />
+                  <span className="absolute bg-emerald-900 border border-emerald-500/50 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest text-emerald-200 shadow">
+                    NET
+                  </span>
+                </div>
+
                 {/* Team A Side */}
-                <div className="text-center space-y-2">
+                <div className="text-center space-y-2 z-0">
                   <p className="font-bold text-sm truncate px-1 text-emerald-100">{team1Name}</p>
-                  <div className="text-6xl font-black tabular-nums tracking-tight font-mono py-3 bg-emerald-900/60 rounded-xl border border-emerald-600/40">
-                    {scoreA}
-                  </div>
                   <button
                     type="button"
                     onClick={() => addPoint("A")}
-                    className="w-full py-4 rounded-xl bg-white text-emerald-900 font-extrabold text-base shadow active:scale-95 transition-transform"
+                    title="Tap to add point"
+                    className="w-full text-6xl font-black tabular-nums tracking-tight font-mono py-4 bg-emerald-900/70 hover:bg-emerald-900 rounded-xl border border-emerald-500/40 active:scale-95 transition cursor-pointer"
+                  >
+                    {scoreA}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addPoint("A")}
+                    className="w-full py-3.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-base shadow active:scale-95 transition cursor-pointer"
                   >
                     +1 Point
                   </button>
                 </div>
 
                 {/* Team B Side */}
-                <div className="text-center space-y-2">
+                <div className="text-center space-y-2 z-0">
                   <p className="font-bold text-sm truncate px-1 text-emerald-100">{team2Name}</p>
-                  <div className="text-6xl font-black tabular-nums tracking-tight font-mono py-3 bg-emerald-900/60 rounded-xl border border-emerald-600/40">
-                    {scoreB}
-                  </div>
                   <button
                     type="button"
                     onClick={() => addPoint("B")}
-                    className="w-full py-4 rounded-xl bg-white text-emerald-900 font-extrabold text-base shadow active:scale-95 transition-transform"
+                    title="Tap to add point"
+                    className="w-full text-6xl font-black tabular-nums tracking-tight font-mono py-4 bg-emerald-900/70 hover:bg-emerald-900 rounded-xl border border-emerald-500/40 active:scale-95 transition cursor-pointer"
+                  >
+                    {scoreB}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addPoint("B")}
+                    className="w-full py-3.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-base shadow active:scale-95 transition cursor-pointer"
                   >
                     +1 Point
                   </button>
                 </div>
               </div>
 
-              {/* Court Net Line */}
-              <div className="border-t border-dashed border-emerald-300/40 my-3 relative">
-                <span className="absolute left-1/2 -translate-x-1/2 -top-2 bg-emerald-800 px-2 text-[9px] uppercase tracking-widest text-emerald-300">
-                  NET
-                </span>
-              </div>
-
               {/* Bottom Actions */}
-              <div className="flex items-center justify-between pt-1">
+              <div className="flex items-center justify-between pt-4 mt-3 border-t border-emerald-700/60">
                 <button
                   type="button"
                   onClick={undoPoint}
                   disabled={scoreLog.length === 0}
-                  className="flex items-center gap-1 text-xs text-emerald-200 hover:text-white disabled:opacity-30"
+                  className="flex items-center gap-1.5 text-xs text-emerald-200 hover:text-white disabled:opacity-30 transition font-medium"
                 >
                   <RotateCcw size={13} />
-                  <span>Undo last point</span>
+                  <span>Undo point</span>
                 </button>
 
                 <button
@@ -311,21 +336,12 @@ export function LiveCourtScorer({
                       setStep("setup");
                     }
                   }}
-                  className="text-xs text-emerald-200/80 hover:text-red-300"
+                  className="text-xs text-emerald-300/80 hover:text-red-300 transition"
                 >
-                  Reset
+                  Reset match
                 </button>
               </div>
             </div>
-
-            {/* Deuce or Game Point Notice */}
-            {(scoreA >= 20 || scoreB >= 20) && (
-              <p className="text-center text-xs font-bold text-amber-600 animate-pulse">
-                {scoreA === scoreB && scoreA >= 20
-                  ? `Deuce! Must win by 2 points (max 30).`
-                  : `Game point for ${scoreA > scoreB ? team1Name : team2Name}!`}
-              </p>
-            )}
           </div>
         )}
 
