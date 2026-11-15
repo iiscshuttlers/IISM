@@ -1,7 +1,7 @@
 import { Suspense, lazy, type ReactNode } from "react";
 import { Link, Redirect, Route, Router, Switch, useLocation } from "wouter";
-import { Bell, CalendarDays, ClipboardList, Dumbbell, LogOut, Settings, Sun, Swords, Trophy, Users } from "lucide-react";
-import { useState } from "react";
+import { Bell, CalendarDays, ClipboardList, Dumbbell, LogOut, Settings, Swords, Trophy, Users } from "lucide-react";
+import { useState, useEffect } from "react";
 import { useSession } from "./lib/session";
 import { supabaseConfigured } from "./lib/supabase";
 import { useActivity } from "./lib/api";
@@ -19,7 +19,9 @@ const SelectionPage = lazy(() => import("./pages/Selection"));
 const SettingsPage = lazy(() => import("./pages/Settings"));
 const ActivityPage = lazy(() => import("./pages/Activity"));
 const InsightsPage = lazy(() => import("./pages/Insights"));
-import { ConnectionBar, SyncEngine, applyOutdoor, readOutdoor } from "./components/AppChrome";
+import { ConnectionBar, SyncEngine } from "./components/AppChrome";
+import { AccessibilityButton } from "./components/AccessibilityModal";
+import { applyA11yPrefs, getA11yPrefs } from "./lib/campExtended";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -65,8 +67,11 @@ function Shell({ children }: { children: ReactNode }) {
   const [loc] = useLocation();
   const activity = useActivity(s.camp?.id);
   const unread = (activity.data ?? []).filter((a) => !a.read_at).length;
-  const [outdoor, setOutdoor] = useState(readOutdoor);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
+
+  useEffect(() => {
+    applyA11yPrefs(getA11yPrefs());
+  }, []);
 
   const nav = [
     { href: "/", label: "Today", icon: CalendarDays },
@@ -97,12 +102,7 @@ function Shell({ children }: { children: ReactNode }) {
             )}
             <p className="text-[11px] text-ink-soft capitalize truncate leading-tight">{s.role ?? "member"} · Training camp</p>
           </div>
-          <button type="button" aria-pressed={outdoor} aria-label="Outdoor mode (high contrast)"
-            title="Outdoor mode: high contrast, bigger buttons"
-            onClick={() => { applyOutdoor(!outdoor); setOutdoor(!outdoor); }}
-            className={cx("rounded-xl p-2 transition hover:bg-surface-2", outdoor ? "text-brand bg-brand/10" : "text-ink-soft")}>
-            <Sun size={19} />
-          </button>
+          <AccessibilityButton />
           <Link href="/activity" aria-label={`Activity${unread ? `, ${unread} unread` : ""}`}
             className="relative rounded-xl p-2 text-ink-soft transition hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
             <Bell size={19} />

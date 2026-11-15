@@ -1,12 +1,17 @@
 import { useState, useMemo } from "react";
-import { Dumbbell, ArrowRightLeft, FileText } from "lucide-react";
+import { Dumbbell, ArrowRightLeft, FileText, TrendingUp, MessageSquare } from "lucide-react";
 import { Badge, Button, Card, Sheet } from "./ui";
 import { CATEGORIES } from "../lib/scores";
 import { SkillRadar } from "./SkillRadar";
 import { PlayerReportCardModal } from "./PlayerReportCard";
+import { PlayerGoalsSection } from "./PlayerGoals";
+import { PersonalMatchHistoryModal } from "./PersonalMatchHistory";
+import { NextSessionFocusCard } from "./NextSessionFocusCard";
+import { SessionReflectionModal } from "./SessionReflection";
 import type { Assessment, Attendance, Match, Member, Standing } from "../lib/types";
 
 export function PlayerDetailSheet({
+  campId,
   personId,
   onClose,
   members,
@@ -17,6 +22,7 @@ export function PlayerDetailSheet({
   isStaff,
   onCompare,
 }: {
+  campId?: string;
   personId: string | null;
   onClose: () => void;
   members: Member[];
@@ -63,6 +69,8 @@ export function PlayerDetailSheet({
   }, [assessments, personId, isStaff]);
 
   const [showReport, setShowReport] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showReflectionsModal, setShowReflectionsModal] = useState(false);
 
   const memberMap = useMemo(() => new Map(members.map((m) => [m.id, m.full_name])), [members]);
   const formatName = (id: string | null) => (id ? memberMap.get(id) ?? "Unknown" : "");
@@ -108,10 +116,30 @@ export function PlayerDetailSheet({
               variant="secondary"
               size="sm"
               className="text-xs"
+              onClick={() => setShowHistoryModal(true)}
+            >
+              <TrendingUp size={13} className="mr-1 text-brand" />
+              Rating Progression
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              className="text-xs"
+              onClick={() => setShowReflectionsModal(true)}
+            >
+              <MessageSquare size={13} className="mr-1 text-brand" />
+              Reflections
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              className="text-xs"
               onClick={() => setShowReport(true)}
             >
               <FileText size={13} className="mr-1" />
-              Report Card / Certificate
+              Report Card
             </Button>
 
             {onCompare && standing && standing.played > 0 && (
@@ -130,6 +158,16 @@ export function PlayerDetailSheet({
             )}
           </div>
         </Card>
+
+        {/* Goals for Next Session (Micro Focus) */}
+        {personId && (
+          <NextSessionFocusCard
+            campId={campId ?? matches[0]?.camp_id ?? ""}
+            personId={personId}
+            playerName={member.full_name}
+            isStaff={isStaff}
+          />
+        )}
 
         {/* Stats Grid */}
         {standing ? (
@@ -209,6 +247,18 @@ export function PlayerDetailSheet({
           </div>
         </Card>
 
+        {/* Player Goals & Progress */}
+        {personId && (
+          <Card>
+            <PlayerGoalsSection
+              campId={campId ?? matches[0]?.camp_id ?? ""}
+              personId={personId}
+              isCoach={isStaff}
+              playerName={member?.full_name}
+            />
+          </Card>
+        )}
+
         {/* Staff Assessments (visible only to coaches/admins) */}
         {isStaff && (
           <Card>
@@ -266,7 +316,19 @@ export function PlayerDetailSheet({
 
         {/* Recent Matches */}
         <section className="space-y-2">
-          <h4 className="text-xs font-bold text-ink-soft uppercase tracking-wider">Recent Matches</h4>
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-bold text-ink-soft uppercase tracking-wider">Recent Matches</h4>
+            {playerMatches.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowHistoryModal(true)}
+                className="text-xs font-semibold text-brand hover:underline flex items-center gap-1"
+              >
+                <TrendingUp size={12} />
+                <span>Full Progression</span>
+              </button>
+            )}
+          </div>
           {playerMatches.length === 0 ? (
             <p className="text-xs text-ink-soft italic">No matches recorded for this player yet.</p>
           ) : (
@@ -304,6 +366,16 @@ export function PlayerDetailSheet({
                   </div>
                 );
               })}
+
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full text-xs mt-2"
+                onClick={() => setShowHistoryModal(true)}
+              >
+                <TrendingUp size={13} className="mr-1 text-brand" />
+                <span>View Complete Match &amp; Rating Progression</span>
+              </Button>
             </div>
           )}
         </section>
@@ -318,6 +390,23 @@ export function PlayerDetailSheet({
         attendance={attendance}
         assessments={assessments}
         campName="IISc Badminton Training Camp"
+      />
+
+      <PersonalMatchHistoryModal
+        open={showHistoryModal}
+        onClose={() => setShowHistoryModal(false)}
+        personId={personId}
+        members={members}
+        matches={matches}
+        standings={standings}
+      />
+
+      <SessionReflectionModal
+        open={showReflectionsModal}
+        onClose={() => setShowReflectionsModal(false)}
+        campId={campId ?? matches[0]?.camp_id ?? ""}
+        personId={personId}
+        playerName={member.full_name}
       />
     </Sheet>
   );

@@ -207,6 +207,7 @@ export default function SelectionPage() {
       </Sheet>
 
       <PlayerDetailSheet
+        campId={camp.id}
         personId={inspectingPlayer}
         onClose={() => setInspectingPlayer(null)}
         members={members.data ?? []}

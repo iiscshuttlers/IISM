@@ -6,6 +6,8 @@ import {
 } from "../lib/api";
 import { confidence, generateCoachingPrompts, pairStats, readiness, trainingLoad } from "../lib/insights";
 import { Badge, Card, Empty, PageTitle, Segmented, Select, cx, fmtDate } from "../components/ui";
+import { Button } from "../components/ui";
+import { InjuryTrackerModal } from "../components/InjuryTracker";
 import type { Member } from "../lib/types";
 
 type Tab = "prompts" | "compare" | "pairs" | "load";
@@ -86,8 +88,8 @@ function PromptsSection({ campId }: { campId: string }) {
                   isWarn
                     ? "border-status-warn-border bg-status-warn-bg/30"
                     : isSuccess
-                    ? "border-status-success-border bg-status-success-bg/30"
-                    : "border-line bg-surface"
+                      ? "border-status-success-border bg-status-success-bg/30"
+                      : "border-line bg-surface"
                 )}
               >
                 <div className="flex items-start gap-2.5">
@@ -108,8 +110,8 @@ function PromptsSection({ campId }: { campId: string }) {
                           isWarn
                             ? "text-status-warn-text"
                             : isSuccess
-                            ? "text-status-success-text"
-                            : "text-ink"
+                              ? "text-status-success-text"
+                              : "text-ink"
                         )}
                       >
                         {p.title}
@@ -285,6 +287,7 @@ function Pairs({ campId }: { campId: string }) {
 // ───────── Load & wellness ─────────
 
 function Load({ campId }: { campId: string }) {
+  const [injuryOpen, setInjuryOpen] = useState(false);
   const players = usePlayers(campId);
   const sessions = useSessions(campId);
   const ids = (sessions.data ?? []).map((x) => x.id);
@@ -307,6 +310,21 @@ function Load({ campId }: { campId: string }) {
 
   return (
     <div className="space-y-3">
+      <div className="flex items-center justify-between p-3 rounded-xl border border-line bg-surface-2/70">
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg bg-surface text-status-warn-text border border-line">
+            <HeartPulse size={18} />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-ink">Confidential Injury &amp; Soreness Board</p>
+            <p className="text-[11px] text-ink-soft">Review confidential player physical reports and assign training modifications.</p>
+          </div>
+        </div>
+        <Button size="sm" variant="secondary" onClick={() => setInjuryOpen(true)}>
+          Open Physio Board
+        </Button>
+      </div>
+
       <p className="text-xs text-ink-soft">
         Load = effort (RPE 1–10) × session minutes, from attendance. A <b>spike</b> is a week more than 50% above the week before,
         a common injury warning sign. Readiness comes from each player's daily check-in (sleep, soreness, energy, mood).
@@ -360,6 +378,15 @@ function Load({ campId }: { campId: string }) {
           </table>
         </Card>
       )}
+
+      <InjuryTrackerModal
+        campId={campId}
+        open={injuryOpen}
+        onClose={() => setInjuryOpen(false)}
+        meId={null}
+        isStaff={true}
+        players={players}
+      />
     </div>
   );
 }

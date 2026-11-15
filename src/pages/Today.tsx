@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Plus, Flame, Check, LineChart, Radio, Sparkles, Calendar,
-  UserCheck, Clock, UserX, Users, Play, Zap
+  UserCheck, Clock, UserX, Users, Play, Zap, Megaphone,
+  Package, HeartPulse, History, BookOpen, TrendingUp, MessageSquare
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
@@ -15,6 +16,17 @@ import { GuideButton } from "../components/GuideModal";
 import { PairingHelperModal } from "../components/PairingHelper";
 import { CampHighlightsCard } from "../components/CampHighlights";
 import { LiveCourtScorer } from "../components/LiveCourtScorer";
+import { AnnouncementBanner, AnnouncementManagerModal } from "../components/Announcements";
+import { PlayerGoalsSection } from "../components/PlayerGoals";
+import { EquipmentTrackerModal } from "../components/EquipmentTracker";
+import { InjuryTrackerModal } from "../components/InjuryTracker";
+import { CampHistoryModal } from "../components/CampHistory";
+import { PersonalMatchHistoryModal } from "../components/PersonalMatchHistory";
+import { SessionReflectionModal, SessionReflectionBanner } from "../components/SessionReflection";
+import { SkillLibrarySheet } from "../components/SkillLibrary";
+import { WeatherVenueBanner } from "../components/WeatherVenuePlan";
+import { NextSessionFocusCard } from "../components/NextSessionFocusCard";
+import { CampCalendarExportModal } from "../components/CalendarExport";
 import { Avatar, Badge, Button, Card, Empty, fmtDate, today } from "../components/ui";
 import { DRILL_TYPES } from "../lib/types";
 import { WellnessCheckin } from "../components/WellnessCheckin";
@@ -25,6 +37,14 @@ export default function TodayPage() {
   const campId = s.camp!.id;
   const [, setLoc] = useLocation();
   const [liveScoring, setLiveScoring] = useState(false);
+  const [announcementOpen, setAnnouncementOpen] = useState(false);
+  const [equipmentOpen, setEquipmentOpen] = useState(false);
+  const [injuryOpen, setInjuryOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [matchHistoryOpen, setMatchHistoryOpen] = useState(false);
+  const [reflectionOpen, setReflectionOpen] = useState(false);
+  const [skillLibraryOpen, setSkillLibraryOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const sessions = useSessions(campId);
   const todays = (sessions.data ?? []).filter((x) => x.session_date === today());
@@ -37,6 +57,7 @@ export default function TodayPage() {
   const members = useMembers(campId);
   const standings = useStandings(campId);
   const mine = (standings.data ?? []).find((r) => r.person_id === s.meId);
+  const myName = (members.data ?? []).find((m) => m.id === s.meId)?.full_name;
   const rank = mine ? (standings.data ?? []).findIndex((r) => r.person_id === s.meId) + 1 : null;
   const recent = (matches.data ?? []).slice(0, 5);
   const isPlayer = s.role === "player";
@@ -184,6 +205,28 @@ export default function TodayPage() {
         </div>
       </div>
 
+      {/* Camp Announcements Alert */}
+      <AnnouncementBanner
+        campId={campId}
+        meId={s.meId ?? null}
+        isStaff={s.isStaff}
+        onOpenManager={() => setAnnouncementOpen(true)}
+      />
+
+      {/* Weather & Venue-Aware Planning Banner */}
+      <WeatherVenueBanner campId={campId} isStaff={s.isStaff} />
+
+      {/* Next Session Focus (Small, trackable focus from coach or self) */}
+      {s.meId && (
+        <NextSessionFocusCard
+          campId={campId}
+          personId={s.meId}
+          playerName={myName}
+          isStaff={s.isStaff}
+          onOpenSkills={() => setSkillLibraryOpen(true)}
+        />
+      )}
+
       {/* Courtside 4-Action Hub */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <button
@@ -257,6 +300,84 @@ export default function TodayPage() {
         </Link>
       </div>
 
+      {/* Camp Utility Shortcuts */}
+      <div className="flex flex-wrap items-center gap-2">
+        {s.meId && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setMatchHistoryOpen(true)}
+            className="flex items-center gap-1.5 !text-xs font-semibold"
+          >
+            <TrendingUp size={14} className="text-brand" />
+            <span>My Match &amp; Rating History</span>
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setSkillLibraryOpen(true)}
+          className="flex items-center gap-1.5 !text-xs"
+        >
+          <BookOpen size={14} className="text-brand" />
+          <span>Skill &amp; Drill Library</span>
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setCalendarOpen(true)}
+          className="flex items-center gap-1.5 !text-xs"
+        >
+          <Calendar size={14} className="text-brand" />
+          <span>Add to Calendar</span>
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setReflectionOpen(true)}
+          className="flex items-center gap-1.5 !text-xs"
+        >
+          <MessageSquare size={14} className="text-brand" />
+          <span>Post-Practice Check-in</span>
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setAnnouncementOpen(true)}
+          className="flex items-center gap-1.5 !text-xs"
+        >
+          <Megaphone size={14} className="text-brand" />
+          <span>Announcements</span>
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setEquipmentOpen(true)}
+          className="flex items-center gap-1.5 !text-xs"
+        >
+          <Package size={14} className="text-brand" />
+          <span>Equipment &amp; Gear</span>
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setInjuryOpen(true)}
+          className="flex items-center gap-1.5 !text-xs"
+        >
+          <HeartPulse size={14} className="text-status-warn-text" />
+          <span>{s.isStaff ? "Physio & Injury Board" : "Report Soreness / Injury"}</span>
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setHistoryOpen(true)}
+          className="flex items-center gap-1.5 !text-xs"
+        >
+          <History size={14} className="text-ink-soft" />
+          <span>Camp Archive</span>
+        </Button>
+      </div>
+
       {/* Player Availability Self-Check-in */}
       {isPlayer && (
         <Card className="border-brand/30 bg-surface">
@@ -320,6 +441,9 @@ export default function TodayPage() {
           </div>
         </Card>
       )}
+
+      {/* Post-Practice Reflection Check-in Banner */}
+      <SessionReflectionBanner onClick={() => setReflectionOpen(true)} />
 
       {/* Staff Live Roster Availability View */}
       {s.isStaff && (
@@ -425,6 +549,14 @@ export default function TodayPage() {
 
       {isPlayer && s.meId && <WellnessCheckin campId={campId} meId={s.meId} />}
 
+      {isPlayer && s.meId && (
+        <PlayerGoalsSection
+          campId={campId}
+          personId={s.meId}
+          isCoach={s.isStaff}
+        />
+      )}
+
       {s.isStaff && (
         <Link href="/insights">
           <Card className="flex items-center gap-3 p-3 hover:border-brand/40">
@@ -499,6 +631,83 @@ export default function TodayPage() {
           if (r.queued) toast.success("No signal: saved on this phone. It will send automatically.");
         }}
         busy={matchMut.record.isPending}
+      />
+
+      {/* Announcements Manager Modal */}
+      <AnnouncementManagerModal
+        campId={campId}
+        open={announcementOpen}
+        onClose={() => setAnnouncementOpen(false)}
+        members={members.data ?? []}
+        authorName={s.isStaff ? "Coach" : "Staff"}
+      />
+
+      {/* Equipment Tracker Modal */}
+      <EquipmentTrackerModal
+        campId={campId}
+        open={equipmentOpen}
+        onClose={() => setEquipmentOpen(false)}
+        players={playerMembers}
+      />
+
+      {/* Injury Tracker Modal */}
+      <InjuryTrackerModal
+        campId={campId}
+        open={injuryOpen}
+        onClose={() => setInjuryOpen(false)}
+        meId={s.meId ?? null}
+        isStaff={s.isStaff}
+        players={playerMembers}
+      />
+
+      {/* Camp History Modal */}
+      <CampHistoryModal
+        camp={s.camp!}
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        members={members.data ?? []}
+        matches={matches.data ?? []}
+        standings={standings.data ?? []}
+        sessions={sessions.data ?? []}
+      />
+
+      {/* Personal Match History & Rating Progression Modal */}
+      <PersonalMatchHistoryModal
+        open={matchHistoryOpen}
+        onClose={() => setMatchHistoryOpen(false)}
+        personId={s.meId ?? null}
+        members={members.data ?? []}
+        matches={matches.data ?? []}
+        standings={standings.data ?? []}
+      />
+
+      {/* Session Reflection Modal */}
+      <SessionReflectionModal
+        open={reflectionOpen}
+        onClose={() => setReflectionOpen(false)}
+        campId={campId}
+        personId={s.meId ?? null}
+        playerName={myName}
+        sessions={sessions.data ?? []}
+      />
+
+      {/* Skill & Drill Library Sheet */}
+      <SkillLibrarySheet
+        open={skillLibraryOpen}
+        onClose={() => setSkillLibraryOpen(false)}
+        campId={campId}
+        currentPersonId={s.meId ?? null}
+        isStaff={s.isStaff}
+      />
+
+      {/* Camp Calendar Export Modal */}
+      <CampCalendarExportModal
+        open={calendarOpen}
+        onClose={() => setCalendarOpen(false)}
+        campName={s.camp?.name ?? "IISc Badminton Camp"}
+        sessions={sessions.data ?? []}
+        matches={matches.data ?? []}
+        members={members.data ?? []}
       />
     </div>
   );

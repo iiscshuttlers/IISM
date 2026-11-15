@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { CheckCheck, CheckCircle2, Circle, Plus, Sparkles, Trash2, Timer, PenTool } from "lucide-react";
+import {
+  CheckCheck, CheckCircle2, Circle, Plus, Sparkles, Trash2, Timer,
+  PenTool, Package, BookOpen, Calendar, MessageSquare
+} from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
 import { useAttendance, useDrills, useMembers, useSessions, useTrainingMutations } from "../lib/api";
@@ -9,6 +12,12 @@ import { Badge, Button, Card, ConfirmDialog, Empty, Field, Input, PageTitle, Sel
 import { DrillTemplatesSheet, type DrillTemplate } from "../components/DrillTemplates";
 import { DrillTimerModal } from "../components/DrillTimer";
 import { TacticalBoardModal } from "../components/TacticalBoard";
+import { EquipmentTrackerModal } from "../components/EquipmentTracker";
+import { SkillLibrarySheet } from "../components/SkillLibrary";
+import { WeatherVenueBanner } from "../components/WeatherVenuePlan";
+import { SessionReflectionModal } from "../components/SessionReflection";
+import { CampCalendarExportModal } from "../components/CalendarExport";
+import { generateGoogleCalendarUrl } from "../lib/calendarExport";
 import { DRILL_TYPES, type Attendance, type Drill, type DrillType, type Session } from "../lib/types";
 
 export default function TrainingPage() {
@@ -23,31 +32,73 @@ export default function TrainingPage() {
   const [adding, setAdding] = useState(false);
   const [timerOpen, setTimerOpen] = useState(false);
   const [tacticsOpen, setTacticsOpen] = useState(false);
+  const [equipmentOpen, setEquipmentOpen] = useState(false);
+  const [skillsOpen, setSkillsOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [reflectionOpen, setReflectionOpen] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const open = (sessions.data ?? []).find((x) => x.id === openId) ?? null;
 
+  const players = (members.data ?? []).filter((m) => m.role === "player");
+
   return (
-    <div>
+    <div className="space-y-4">
       <PageTitle
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setSkillsOpen(true)}
+              className="flex items-center gap-1"
+            >
+              <BookOpen size={14} className="text-brand" />
+              <span>Skills</span>
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setCalendarOpen(true)}
+              className="flex items-center gap-1"
+            >
+              <Calendar size={14} className="text-brand" />
+              <span>Calendar</span>
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setReflectionOpen(true)}
+              className="flex items-center gap-1"
+            >
+              <MessageSquare size={14} className="text-brand" />
+              <span>Reflect</span>
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setEquipmentOpen(true)}
+              className="flex items-center gap-1"
+            >
+              <Package size={14} className="text-brand" />
+              <span>Gear</span>
+            </Button>
             <Button
               variant="secondary"
               size="sm"
               onClick={() => setTacticsOpen(true)}
-              className="flex items-center gap-1.5"
+              className="flex items-center gap-1"
             >
               <PenTool size={14} className="text-brand" />
-              <span>Tactics Board</span>
+              <span>Tactics</span>
             </Button>
             <Button
               variant="secondary"
               size="sm"
               onClick={() => setTimerOpen(true)}
-              className="flex items-center gap-1.5"
+              className="flex items-center gap-1"
             >
               <Timer size={14} className="text-brand" />
-              <span>Interval Timer</span>
+              <span>Timer</span>
             </Button>
             <Button size="sm" onClick={() => setAdding(true)}>
               <Plus size={16} /> Session
@@ -57,6 +108,9 @@ export default function TrainingPage() {
       >
         Training log
       </PageTitle>
+
+      {/* Weather & Venue-Aware Planning Banner */}
+      <WeatherVenueBanner campId={campId} isStaff={s.isStaff} />
       {sessions.isLoading ? (
         <p className="text-sm text-ink-soft">Loading…</p>
       ) : (sessions.data ?? []).length === 0 ? (
@@ -116,6 +170,38 @@ export default function TrainingPage() {
       <TacticalBoardModal
         open={tacticsOpen}
         onClose={() => setTacticsOpen(false)}
+      />
+
+      <EquipmentTrackerModal
+        campId={campId}
+        open={equipmentOpen}
+        onClose={() => setEquipmentOpen(false)}
+        players={players}
+      />
+
+      <SkillLibrarySheet
+        open={skillsOpen}
+        onClose={() => setSkillsOpen(false)}
+        campId={campId}
+        currentPersonId={s.meId ?? null}
+        isStaff={s.isStaff}
+      />
+
+      <CampCalendarExportModal
+        open={calendarOpen}
+        onClose={() => setCalendarOpen(false)}
+        campName={s.camp?.name ?? "IISc Badminton Camp"}
+        sessions={sessions.data ?? []}
+        members={members.data ?? []}
+      />
+
+      <SessionReflectionModal
+        open={reflectionOpen}
+        onClose={() => setReflectionOpen(false)}
+        campId={campId}
+        personId={s.meId ?? null}
+        playerName={(members.data ?? []).find((m) => m.id === s.meId)?.full_name}
+        sessions={sessions.data ?? []}
       />
     </div>
   );
@@ -229,8 +315,17 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
         <div>
           {session.focus && <p className="text-sm"><span className="font-semibold">Focus:</span> {session.focus}</p>}
           {session.notes && <p className="mt-1 whitespace-pre-wrap text-sm text-ink-soft">{session.notes}</p>}
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>Edit details</Button>
+            <a
+              href={generateGoogleCalendarUrl(session, "IISc Badminton Camp")}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-brand hover:underline px-2.5 py-1 rounded bg-brand/5 border border-brand/20"
+            >
+              <Calendar size={13} />
+              <span>Add to Google Cal</span>
+            </a>
             {canDelete && (
               <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-700" onClick={() => setConfirmDelete(true)}>
                 Delete session
@@ -286,7 +381,7 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
                   </p>
                   <p className="text-xs text-ink-soft">
                     {[d.duration_min && `${d.duration_min} min`, d.sets && `${d.sets} sets`, d.reps && `${d.reps} reps`,
-                      d.intensity && `intensity ${d.intensity}/5`].filter(Boolean).join(" · ")}
+                    d.intensity && `intensity ${d.intensity}/5`].filter(Boolean).join(" · ")}
                   </p>
                   {d.notes && <p className="text-xs text-ink-soft">{d.notes}</p>}
                 </div>

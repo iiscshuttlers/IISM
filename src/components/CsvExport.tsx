@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { Download } from "lucide-react";
+import { Download, FileJson, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import { useMembers, useMatches, useStandings, useSessions, useDrills, useAttendance } from "../lib/api";
 import { downloadCsv } from "../lib/exportCsv";
+import { exportFullCampJson } from "../lib/campExtended";
+import { generateCampIcs, downloadIcsFile } from "../lib/calendarExport";
 import { Button, Card } from "./ui";
 import type { Camp } from "../lib/types";
 
@@ -185,40 +187,130 @@ export function CsvExportCard({ camp }: { camp: Camp }) {
     }
   };
 
+  const exportFullBackup = () => {
+    try {
+      setExporting("json_backup");
+      const safeCampName = camp.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const jsonStr = exportFullCampJson(camp.id, {
+        campName: camp.name,
+        starts_on: camp.starts_on,
+        ends_on: camp.ends_on,
+        standings: standingsQ.data ?? [],
+        matches: matchesQ.data ?? [],
+        members: membersQ.data ?? [],
+        sessions: sessionsQ.data ?? [],
+        drills: drillsQ.data ?? [],
+        attendance: attendanceQ.data ?? [],
+      });
+
+      const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${safeCampName}-full-camp-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success("Complete Camp Backup (JSON) downloaded");
+    } catch {
+      toast.error("Failed to generate full camp backup");
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const exportCalendar = () => {
+    try {
+      setExporting("calendar");
+      const ics = generateCampIcs({
+        campName: camp.name,
+        sessions: sessionsQ.data ?? [],
+        matches: matchesQ.data ?? [],
+        members: membersQ.data ?? [],
+      });
+      const safeCamp = camp.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      downloadIcsFile(`${safeCamp}-calendar.ics`, ics);
+      toast.success("Camp schedule (.ics) exported");
+    } catch {
+      toast.error("Failed to export calendar");
+    } finally {
+      setExporting(null);
+    }
+  };
+
   return (
-    <Card>
-      <div className="mb-1 flex items-center justify-between">
-        <h2 className="text-sm font-bold">Data export (CSV)</h2>
-        <Download size={16} className="text-ink-soft" />
+    <Card className="space-y-4">
+      <div>
+        <div className="mb-1 flex items-center justify-between">
+          <h2 className="text-sm font-bold">Data export &amp; backups</h2>
+          <Download size={16} className="text-ink-soft" />
+        </div>
+        <p className="text-xs text-ink-soft">
+          Download complete camp records for offline analysis, archiving, or continuity.
+        </p>
       </div>
-      <p className="mb-4 text-xs text-ink-soft">
-        Download complete camp records for offline analysis, archiving, or team records.
-      </p>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={exporting !== null || standingsQ.isLoading}
-          onClick={exportStandings}
-        >
-          {exporting === "standings" ? "Exporting…" : "Standings CSV"}
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={exporting !== null || matchesQ.isLoading}
-          onClick={exportMatches}
-        >
-          {exporting === "matches" ? "Exporting…" : "Matches CSV"}
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={exporting !== null || sessionsQ.isLoading}
-          onClick={exportTraining}
-        >
-          {exporting === "training" ? "Exporting…" : "Training & Attendance CSV"}
-        </Button>
+
+      <div>
+        <p className="text-xs font-semibold text-ink mb-1.5">Tabular Reports &amp; Schedule</p>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={exporting !== null || standingsQ.isLoading}
+            onClick={exportStandings}
+          >
+            {exporting === "standings" ? "Exporting…" : "Standings CSV"}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={exporting !== null || matchesQ.isLoading}
+            onClick={exportMatches}
+          >
+            {exporting === "matches" ? "Exporting…" : "Matches CSV"}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={exporting !== null || sessionsQ.isLoading}
+            onClick={exportTraining}
+          >
+            {exporting === "training" ? "Exporting…" : "Training & Attendance CSV"}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={exporting !== null || sessionsQ.isLoading}
+            onClick={exportCalendar}
+            className="flex items-center gap-1.5"
+          >
+            <Calendar size={13} className="text-brand" />
+            <span>{exporting === "calendar" ? "Exporting…" : "Camp Calendar (.ics)"}</span>
+          </Button>
+        </div>
+      </div>
+
+      <div className="pt-3 border-t border-line">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold text-ink flex items-center gap-1.5">
+              <FileJson size={15} className="text-brand" />
+              Complete Camp Backup (JSON)
+            </p>
+            <p className="text-[11px] text-ink-soft">
+              All camp records: roster, matches, ratings, training drills, announcements, equipment &amp; goals.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            disabled={exporting !== null}
+            onClick={exportFullBackup}
+          >
+            {exporting === "json_backup" ? "Exporting…" : "Download Backup"}
+          </Button>
+        </div>
       </div>
     </Card>
   );

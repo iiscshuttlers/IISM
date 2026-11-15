@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, History } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
-import { useAdminMutations, useRosterAdmin } from "../lib/api";
+import { useAdminMutations, useMatches, useMembers, useRosterAdmin, useSessions, useStandings } from "../lib/api";
 import { errorText } from "../lib/supabase";
 import { Badge, Button, Card, ConfirmDialog, Field, Input, PageTitle, Segmented, Select, Sheet, Toggle } from "../components/ui";
 import { CsvExportCard } from "../components/CsvExport";
+import { CampHistoryModal } from "../components/CampHistory";
 import type { RosterAdminRow, Role } from "../lib/types";
 
 export default function SettingsPage() {
@@ -13,6 +14,11 @@ export default function SettingsPage() {
   const camp = s.camp!;
   const roster = useRosterAdmin(camp.id, true);
   const mut = useAdminMutations(camp.id);
+  const matches = useMatches(camp.id);
+  const standings = useStandings(camp.id);
+  const sessions = useSessions(camp.id);
+  const members = useMembers(camp.id);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<RosterAdminRow | null>(null);
   const [confirmDeletePerson, setConfirmDeletePerson] = useState<RosterAdminRow | null>(null);
@@ -139,6 +145,23 @@ export default function SettingsPage() {
         </div>
       </Card>
 
+      <Card>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold flex items-center gap-1.5">
+              <History size={16} className="text-brand" />
+              Camp History &amp; Records
+            </h2>
+            <p className="text-xs text-ink-soft mt-0.5">
+              Browse past training sessions, tournament milestones, final standings and archived rosters.
+            </p>
+          </div>
+          <Button variant="secondary" size="sm" onClick={() => setHistoryOpen(true)}>
+            View Archive
+          </Button>
+        </div>
+      </Card>
+
       <CsvExportCard camp={camp} />
 
       <Sheet open={adding} onClose={() => setAdding(false)} title="Add person">
@@ -199,6 +222,16 @@ export default function SettingsPage() {
           });
         }}
         onCancel={() => setConfirmDeletePerson(null)}
+      />
+
+      <CampHistoryModal
+        camp={camp}
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        members={members.data ?? []}
+        matches={matches.data ?? []}
+        standings={standings.data ?? []}
+        sessions={sessions.data ?? []}
       />
     </div>
   );

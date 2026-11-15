@@ -194,6 +194,7 @@ export default function StandingsPage() {
 
       {/* Player Detail Sheet */}
       <PlayerDetailSheet
+        campId={campId}
         personId={selectedPersonId}
         onClose={() => setSelectedPersonId(null)}
         members={members.data ?? []}
