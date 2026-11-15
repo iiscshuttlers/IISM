@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { CheckCheck, Plus, Sparkles, Trash2, Timer, PenTool } from "lucide-react";
+import { Link } from "wouter";
+import { CheckCheck, CheckCircle2, Circle, Plus, Sparkles, Trash2, Timer, PenTool } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
 import { useAttendance, useDrills, useMembers, useSessions, useTrainingMutations } from "../lib/api";
@@ -168,8 +169,18 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
   const [editing, setEditing] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [completedDrills, setCompletedDrills] = useState<Set<string>>(new Set());
   const num = (x: string) => (x.trim() ? Number(x) : null);
   const onErr = (e: unknown) => toast.error(errorText(e));
+
+  const toggleDrillDone = (id: string) => {
+    setCompletedDrills((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const mark = (personId: string, patch: Partial<Attendance>) => {
     const cur = attendance.find((a) => a.person_id === personId);
@@ -231,7 +242,14 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
 
       <section>
         <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-sm font-bold">Drills</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-bold">Drills</h3>
+            {drills.length > 0 && (
+              <span className="text-xs text-ink-soft font-mono">
+                ({completedDrills.size}/{drills.length} completed)
+              </span>
+            )}
+          </div>
           <Button size="sm" variant="secondary" onClick={() => setShowTemplates(true)}>
             <Sparkles size={14} className="text-amber-500 mr-1" />
             Routine templates
@@ -239,22 +257,46 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
         </div>
         {drills.length === 0 && <p className="mb-2 text-sm text-ink-soft">No drills yet. Pick a routine above or create one below.</p>}
         <div className="space-y-1.5">
-          {drills.map((d) => (
-            <div key={d.id} className="flex items-start gap-2 rounded-lg bg-surface-2 px-3 py-2">
-              <div className="flex-1">
-                <p className="text-sm font-semibold">{d.drill_name} <Badge tone="brand">{DRILL_TYPES.find((t) => t.value === d.drill_type)?.label}</Badge></p>
-                <p className="text-xs text-ink-soft">
-                  {[d.duration_min && `${d.duration_min} min`, d.sets && `${d.sets} sets`, d.reps && `${d.reps} reps`,
-                    d.intensity && `intensity ${d.intensity}/5`].filter(Boolean).join(" · ")}
-                </p>
-                {d.notes && <p className="text-xs text-ink-soft">{d.notes}</p>}
+          {drills.map((d) => {
+            const isDone = completedDrills.has(d.id);
+            return (
+              <div
+                key={d.id}
+                className={cx(
+                  "flex items-start gap-2 rounded-lg bg-surface-2 px-3 py-2 transition-opacity",
+                  isDone && "opacity-60 bg-surface-2/60"
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => toggleDrillDone(d.id)}
+                  title={isDone ? "Mark drill pending" : "Mark drill completed"}
+                  className="mt-0.5 text-ink-soft hover:text-status-success-text transition-colors shrink-0"
+                >
+                  {isDone ? (
+                    <CheckCircle2 size={18} className="text-status-success-text" />
+                  ) : (
+                    <Circle size={18} />
+                  )}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className={cx("text-sm font-semibold", isDone && "line-through text-ink-soft")}>
+                    {d.drill_name}{" "}
+                    <Badge tone="brand">{DRILL_TYPES.find((t) => t.value === d.drill_type)?.label}</Badge>
+                  </p>
+                  <p className="text-xs text-ink-soft">
+                    {[d.duration_min && `${d.duration_min} min`, d.sets && `${d.sets} sets`, d.reps && `${d.reps} reps`,
+                      d.intensity && `intensity ${d.intensity}/5`].filter(Boolean).join(" · ")}
+                  </p>
+                  {d.notes && <p className="text-xs text-ink-soft">{d.notes}</p>}
+                </div>
+                {canDelete && (
+                  <button aria-label={`Delete ${d.drill_name}`} className="p-1 text-ink-soft hover:text-red-600"
+                    onClick={() => mut.deleteDrill.mutate(d.id, { onError: onErr })}><Trash2 size={16} /></button>
+                )}
               </div>
-              {canDelete && (
-                <button aria-label={`Delete ${d.drill_name}`} className="p-1 text-ink-soft hover:text-red-600"
-                  onClick={() => mut.deleteDrill.mutate(d.id, { onError: onErr })}><Trash2 size={16} /></button>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
         <form className="mt-3 space-y-2 rounded-lg border border-line p-3" onSubmit={(e) => {
           e.preventDefault();
@@ -322,6 +364,16 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
               </div>
             );
           })}
+        </div>
+
+        <div className="mt-3 p-3 bg-surface-2 rounded-lg border border-line flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold text-ink">Ready to evaluate player performance?</p>
+            <p className="text-[11px] text-ink-soft">Record technique, fitness, tactics &amp; attitude scores for selection.</p>
+          </div>
+          <Link href="/selection">
+            <Button size="sm" variant="secondary">Assess squad →</Button>
+          </Link>
         </div>
       </section>
 

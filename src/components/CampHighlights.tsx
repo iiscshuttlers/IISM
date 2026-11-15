@@ -48,7 +48,7 @@ export function CampHighlightsCard({
               <span>Rating Leader</span>
             </div>
             <p className="font-bold text-xs text-ink truncate mt-0.5">{leader.full_name}</p>
-            <p className="text-[11px] font-mono text-brand font-semibold">{leader.rating} pts</p>
+            <p className="text-[11px] font-mono text-brand font-semibold">{leader.rating} Elo</p>
           </div>
         )}
 

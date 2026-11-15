@@ -1,27 +1,29 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, HeartPulse, Users, UsersRound } from "lucide-react";
+import { AlertTriangle, HeartPulse, Sparkles, TrendingUp, Users, UsersRound } from "lucide-react";
 import { useSession } from "../lib/session";
 import {
   useAssessments, useAttendance, useDrills, useMatches, useMembers, useSelection, useSessions, useStandings, useWellness,
 } from "../lib/api";
-import { confidence, pairStats, readiness, trainingLoad } from "../lib/insights";
+import { confidence, generateCoachingPrompts, pairStats, readiness, trainingLoad } from "../lib/insights";
 import { Badge, Card, Empty, PageTitle, Segmented, Select, cx, fmtDate } from "../components/ui";
 import type { Member } from "../lib/types";
 
-type Tab = "compare" | "pairs" | "load";
+type Tab = "prompts" | "compare" | "pairs" | "load";
 
-/** Staff-only analysis for selection: side-by-side comparison, doubles pairs, load and wellness. */
+/** Staff-only analysis for selection: coaching prompts, side-by-side comparison, doubles pairs, load and wellness. */
 export default function InsightsPage() {
   const s = useSession();
-  const [tab, setTab] = useState<Tab>("compare");
+  const [tab, setTab] = useState<Tab>("prompts");
   return (
     <div className="space-y-4">
-      <PageTitle>Insights</PageTitle>
+      <PageTitle>Insights & Coaching</PageTitle>
       <Segmented<Tab> value={tab} onChange={setTab} options={[
+        { value: "prompts", label: "Coaching Prompts" },
         { value: "compare", label: "Compare" },
-        { value: "pairs", label: "Pairs" },
-        { value: "load", label: "Load & wellness" },
+        { value: "pairs", label: "Doubles Pairs" },
+        { value: "load", label: "Load & Wellness" },
       ]} />
+      {tab === "prompts" && <PromptsSection campId={s.camp!.id} />}
       {tab === "compare" && <Compare campId={s.camp!.id} />}
       {tab === "pairs" && <Pairs campId={s.camp!.id} />}
       {tab === "load" && <Load campId={s.camp!.id} />}
@@ -32,6 +34,102 @@ export default function InsightsPage() {
 function usePlayers(campId: string): Member[] {
   const members = useMembers(campId);
   return useMemo(() => (members.data ?? []).filter((m) => m.role === "player"), [members.data]);
+}
+
+// ───────── Actionable Coaching Prompts ─────────
+
+function PromptsSection({ campId }: { campId: string }) {
+  const players = usePlayers(campId);
+  const standings = useStandings(campId);
+  const matches = useMatches(campId);
+  const sessions = useSessions(campId);
+  const ids = (sessions.data ?? []).map((x) => x.id);
+  const drills = useDrills(ids);
+  const attendance = useAttendance(ids);
+  const wellness = useWellness(campId);
+
+  const load = useMemo(
+    () => trainingLoad(sessions.data ?? [], drills.data ?? [], attendance.data ?? []),
+    [sessions.data, drills.data, attendance.data]
+  );
+
+  const prompts = useMemo(() => {
+    return generateCoachingPrompts({
+      players,
+      matches: matches.data ?? [],
+      standings: standings.data ?? [],
+      load,
+      wellness: wellness.data ?? [],
+    });
+  }, [players, matches.data, standings.data, load, wellness.data]);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-ink-soft">
+          Automated coaching flags synthesized from match ratings, win streaks, doubles lift, and physical recovery.
+        </p>
+      </div>
+
+      {prompts.length === 0 ? (
+        <Empty>No urgent coaching alerts. Camp metrics are balanced.</Empty>
+      ) : (
+        <div className="space-y-2.5">
+          {prompts.map((p) => {
+            const isWarn = p.severity === "warn";
+            const isSuccess = p.severity === "success";
+            return (
+              <Card
+                key={p.id}
+                className={cx(
+                  "p-3.5 border transition-shadow",
+                  isWarn
+                    ? "border-status-warn-border bg-status-warn-bg/30"
+                    : isSuccess
+                    ? "border-status-success-border bg-status-success-bg/30"
+                    : "border-line bg-surface"
+                )}
+              >
+                <div className="flex items-start gap-2.5">
+                  <div className="shrink-0 mt-0.5">
+                    {isWarn ? (
+                      <AlertTriangle size={18} className="text-status-warn-text" />
+                    ) : isSuccess ? (
+                      <TrendingUp size={18} className="text-status-success-text" />
+                    ) : (
+                      <Sparkles size={18} className="text-brand" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <p
+                        className={cx(
+                          "text-xs font-bold",
+                          isWarn
+                            ? "text-status-warn-text"
+                            : isSuccess
+                            ? "text-status-success-text"
+                            : "text-ink"
+                        )}
+                      >
+                        {p.title}
+                      </p>
+                      <Badge tone={isWarn ? "warn" : isSuccess ? "good" : "neutral"}>
+                        {p.type.replace("_", " ")}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-ink-soft mt-1 leading-relaxed">
+                      {p.description}
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ───────── Compare ─────────
@@ -77,7 +175,7 @@ function Compare({ campId }: { campId: string }) {
         ["Confidence", st ? conf.label : "—"],
         ["Played · won", st ? `${st.played} · ${st.won}` : "—"],
         ["Win %", st?.played ? `${Math.round((100 * st.won) / st.played)}%` : "—"],
-        ["Points ±", st && (st.points_for || st.points_against) ? String(st.points_for - st.points_against) : "—"],
+        ["Rally ± (game score)", st && (st.points_for || st.points_against) ? String(st.points_for - st.points_against) : "—"],
         ["Form", st?.form || "—"],
         ["Attendance", sessCount ? `${Math.round((100 * att.filter((a) => a.status !== "absent").length) / sessCount)}%` : "—"],
         ["Load, last 7 days", String(load.find((l) => l.person_id === id)?.week ?? 0)],

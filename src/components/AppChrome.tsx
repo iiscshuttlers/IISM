@@ -4,8 +4,8 @@ import { useRegisterSW } from "virtual:pwa-register/react";
 import { CloudOff, Download, RefreshCw, Share, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
-import { flushOutbox, useOutbox } from "../lib/outbox";
-import { Button, Card } from "./ui";
+import { flushOutbox, outbox, useOutbox } from "../lib/outbox";
+import { Button, Card, Sheet, cx } from "./ui";
 
 // ───────── Online status ─────────
 
@@ -21,21 +21,129 @@ export function useOnline(): boolean {
   return online;
 }
 
-/** Thin bar under the header: offline notice and results waiting to sync. */
+/** Interactive bar under header: offline notice, sync status, and tap-to-inspect outbox drawer. */
 export function ConnectionBar({ campId }: { campId: string }) {
   const online = useOnline();
   const pending = useOutbox(campId);
   const waiting = pending.filter((p) => !p.error).length;
-  if (online && waiting === 0) return null;
+  const failed = pending.filter((p) => !!p.error).length;
+  const [openDrawer, setOpenDrawer] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  if (online && pending.length === 0) return null;
+
+  const handleManualSync = async () => {
+    setSyncing(true);
+    try {
+      const n = await flushOutbox();
+      if (n > 0) {
+        toast.success(`${n} queued match result${n === 1 ? "" : "s"} synced successfully!`);
+      } else {
+        toast.info("All local changes are synced");
+      }
+    } catch {
+      toast.error("Could not sync - check internet connection");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
-    <div role="status" className="flex items-center gap-2 bg-status-warn-bg px-4 py-1.5 text-xs font-semibold text-status-warn-text border-b border-status-warn-border">
-      <CloudOff size={14} />
-      {online
-        ? `Sending ${waiting} saved result${waiting === 1 ? "" : "s"}…`
-        : waiting
-          ? `Offline · ${waiting} result${waiting === 1 ? "" : "s"} saved on this phone, will send when back online`
-          : "Offline · showing saved data. New results are kept on this phone until you're back online."}
-    </div>
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpenDrawer(true)}
+        className="flex items-center justify-between gap-2 bg-status-warn-bg px-4 py-1.5 text-xs font-semibold text-status-warn-text border-b border-status-warn-border cursor-pointer hover:opacity-90 transition select-none"
+      >
+        <div className="flex items-center gap-2 truncate">
+          <CloudOff size={14} className="shrink-0" />
+          <span className="truncate">
+            {online
+              ? `Sync Queue: ${waiting} waiting${failed ? `, ${failed} need retry` : ""}`
+              : `Offline · ${pending.length} match${pending.length === 1 ? "" : "es"} saved locally on phone`}
+          </span>
+        </div>
+        <span className="shrink-0 text-[11px] font-bold underline underline-offset-2">View queue →</span>
+      </div>
+
+      <Sheet open={openDrawer} onClose={() => setOpenDrawer(false)} title="Local Changes & Sync Queue">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between p-3 rounded-xl bg-surface-2 border border-line">
+            <div className="flex items-center gap-2">
+              <span className={cx("h-2.5 w-2.5 rounded-full", online ? "bg-status-success-text" : "bg-status-warn-text")} />
+              <span className="text-xs font-bold text-ink">
+                {online ? "Internet Connected" : "Working Offline (Courtside Mode)"}
+              </span>
+            </div>
+            {online && (
+              <Button size="sm" onClick={handleManualSync} disabled={syncing}>
+                <RefreshCw size={13} className={cx("mr-1", syncing && "animate-spin")} />
+                <span>{syncing ? "Syncing…" : "Sync Now"}</span>
+              </Button>
+            )}
+          </div>
+
+          <p className="text-xs text-ink-soft">
+            Matches recorded courtside without internet are safely preserved in phone storage. They sync automatically as soon as connection is detected.
+          </p>
+
+          {pending.length === 0 ? (
+            <p className="text-center py-6 text-xs text-ink-soft border border-dashed border-line rounded-xl">
+              All results are fully synced with the camp database.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {pending.map((p) => (
+                <div key={p.clientId} className="p-3 rounded-xl border border-line bg-surface space-y-2 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-brand uppercase">{p.input.category} Match</span>
+                    <span className={cx(
+                      "text-[10px] font-bold px-2 py-0.5 rounded-full border",
+                      p.error
+                        ? "bg-status-danger-bg text-status-danger-text border-status-danger-border"
+                        : "bg-status-warn-bg text-status-warn-text border-status-warn-border"
+                    )}>
+                      {p.error ? "Sync Error" : "Waiting for signal"}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-ink font-mono">
+                    Scores: {p.input.games?.join(", ") || "Winner only"} · Winner: Side {p.input.winner}
+                  </p>
+
+                  <p className="text-[11px] text-ink-soft">
+                    Saved locally: {new Date(p.queuedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+
+                  {p.error && (
+                    <p className="text-xs text-status-danger-text font-medium bg-status-danger-bg/50 p-2 rounded-lg">
+                      {p.error}
+                    </p>
+                  )}
+
+                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-line/60">
+                    {p.error && (
+                      <Button size="sm" variant="secondary" onClick={() => outbox.retry(p.clientId)}>
+                        Retry
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => outbox.remove(p.clientId)}
+                      className="text-status-danger-text hover:bg-status-danger-bg"
+                    >
+                      Discard
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Sheet>
+    </>
   );
 }
 

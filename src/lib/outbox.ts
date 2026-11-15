@@ -40,6 +40,9 @@ function write(items: OutboxItem[]) {
 export const outbox = {
   all: read,
   add(item: OutboxItem) { write([...read().filter((i) => i.clientId !== item.clientId), item]); },
+  updateInput(clientId: string, input: MatchInput) {
+    write(read().map((i) => (i.clientId === clientId ? { ...i, input, error: undefined } : i)));
+  },
   remove(clientId: string) { write(read().filter((i) => i.clientId !== clientId)); },
   retry(clientId: string) { write(read().map((i) => (i.clientId === clientId ? { ...i, error: undefined } : i))); },
   clear() { write([]); },

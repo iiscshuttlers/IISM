@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Sparkles, ArrowRight, BatteryCharging, Clock } from "lucide-react";
+import { Sparkles, ArrowRight, BatteryCharging, Clock, UserCheck } from "lucide-react";
 import { Avatar, Button, Card, Segmented, Sheet } from "./ui";
 import { CATEGORIES, isSingles, type Category } from "../lib/scores";
 import type { Member, Match, Standing } from "../lib/types";
@@ -21,15 +21,18 @@ export function PairingHelperModal({
   players,
   matches,
   standings,
+  attendanceMap,
   onSelectMatch,
 }: {
   players: Member[];
   matches: Match[];
   standings: Standing[];
+  attendanceMap?: Record<string, "present" | "late" | "absent">;
   onSelectMatch: (category: Category, slots: (string | null)[]) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [selectedCat, setSelectedCat] = useState<Category>("MS");
+  const [onlyAvailable, setOnlyAvailable] = useState(true);
 
   const ratingMap = useMemo(() => new Map(standings.map((s) => [s.person_id, s.glicko ?? s.rating])), [standings]);
   const hist = useMemo(() => history(matches), [matches]);
@@ -58,12 +61,21 @@ export function PairingHelperModal({
     return new Set([last.t1_p1, last.t1_p2, last.t2_p1, last.t2_p2].filter(Boolean) as string[]);
   }, [matches]);
 
+  const hasAttendanceData = Boolean(attendanceMap && Object.keys(attendanceMap).length > 0);
+
   const suggestions = useMemo<SuggestedPairing[]>(() => {
     const singles = isSingles(selectedCat);
 
-    // Filter players eligible by gender
-    const eligibleMale = players.filter((p) => !p.gender || p.gender === "M");
-    const eligibleFemale = players.filter((p) => !p.gender || p.gender === "F");
+    // Filter players eligible by gender and availability
+    const isAbsent = (id: string) => attendanceMap?.[id] === "absent";
+    const filterAvail = (pool: Member[]) => {
+      if (!onlyAvailable || !hasAttendanceData) return pool;
+      const filtered = pool.filter((p) => !isAbsent(p.id));
+      return filtered.length >= (singles ? 2 : selectedCat === "XD" ? 2 : 4) ? filtered : pool;
+    };
+
+    const eligibleMale = filterAvail(players.filter((p) => !p.gender || p.gender === "M"));
+    const eligibleFemale = filterAvail(players.filter((p) => !p.gender || p.gender === "F"));
 
     const getRating = (id: string) => ratingMap.get(id) ?? 1500;
 
@@ -96,7 +108,7 @@ export function PairingHelperModal({
               totalPlayed === 0
                 ? "Both need first match"
                 : diff <= 30
-                ? `Closest rating gap (${diff} pts)`
+                ? `Closest rating (${diff} Elo gap)`
                 : `Balanced court time (${playCounts.get(p1.id)} vs ${playCounts.get(p2.id)} played)`,
           });
         }
@@ -127,7 +139,7 @@ export function PairingHelperModal({
                 team1Rating: Math.round(t1Avg),
                 team2Rating: Math.round(t2Avg),
                 ratingDiff: diff,
-                reason: diff <= 25 ? `Evenly matched mixed pair (${diff} pts diff)` : "Balanced playtime",
+                reason: diff <= 25 ? `Evenly matched mixed pair (${diff} Elo diff)` : "Balanced playtime",
               });
             }
           }
@@ -161,7 +173,7 @@ export function PairingHelperModal({
                 team1Rating: Math.round(t1Avg),
                 team2Rating: Math.round(t2Avg),
                 ratingDiff: diff,
-                reason: diff <= 30 ? `Closest doubles balance (${diff} pts)` : "Least matches played",
+                reason: diff <= 30 ? `Closest doubles balance (${diff} Elo gap)` : "Least matches played",
               });
             }
           }
@@ -191,7 +203,7 @@ export function PairingHelperModal({
       })
       .sort((a, b) => a.score - b.score)
       .slice(0, 4);
-  }, [selectedCat, players, matches, playCounts, ratingMap, hist, lastMatchPlayerIds]);
+  }, [selectedCat, players, matches, playCounts, ratingMap, hist, lastMatchPlayerIds, onlyAvailable, hasAttendanceData, attendanceMap]);
 
   const handlePick = (pairing: SuggestedPairing) => {
     const singles = isSingles(pairing.category);
@@ -232,6 +244,21 @@ export function PairingHelperModal({
             />
           </div>
 
+          {hasAttendanceData && (
+            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-ink bg-surface-2/70 p-2 rounded-lg border border-line">
+              <input
+                type="checkbox"
+                checked={onlyAvailable}
+                onChange={(e) => setOnlyAvailable(e.target.checked)}
+                className="rounded border-line text-brand focus:ring-brand accent-brand h-4 w-4"
+              />
+              <span className="flex items-center gap-1.5">
+                <UserCheck size={14} className="text-status-success-text" />
+                Prioritize players checked-in today
+              </span>
+            </label>
+          )}
+
           <div className="space-y-2.5">
             {suggestions.length === 0 ? (
               <div className="p-4 text-center text-sm text-ink-soft border border-dashed border-line rounded-lg">
@@ -266,6 +293,12 @@ export function PairingHelperModal({
                           <div key={p.id} className="flex items-center gap-1.5">
                             <Avatar name={p.full_name} size="xs" />
                             <span className="font-semibold text-ink text-xs sm:text-sm truncate">{p.full_name}</span>
+                            {attendanceMap?.[p.id] === "present" && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-status-success-text shrink-0" title="Present today" />
+                            )}
+                            {attendanceMap?.[p.id] === "absent" && (
+                              <span className="text-[10px] text-status-danger-text font-medium" title="Marked absent">(Away)</span>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -280,6 +313,12 @@ export function PairingHelperModal({
                       <div className="space-y-1 flex flex-col items-end">
                         {s.team2.map((p) => (
                           <div key={p.id} className="flex items-center justify-end gap-1.5 w-full">
+                            {attendanceMap?.[p.id] === "absent" && (
+                              <span className="text-[10px] text-status-danger-text font-medium" title="Marked absent">(Away)</span>
+                            )}
+                            {attendanceMap?.[p.id] === "present" && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-status-success-text shrink-0" title="Present today" />
+                            )}
                             <span className="font-semibold text-ink text-xs sm:text-sm truncate">{p.full_name}</span>
                             <Avatar name={p.full_name} size="xs" />
                           </div>

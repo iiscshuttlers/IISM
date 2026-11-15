@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { history, pairStats, readiness, suggestionScore, trainingLoad } from "./insights";
-import type { Attendance, Match, Session } from "./types";
+import { generateCoachingPrompts, history, pairStats, readiness, suggestionScore, trainingLoad } from "./insights";
+import type { Attendance, Match, Member, Session, Standing } from "./types";
 
 let n = 0;
 const match = (t1: [string, string?], t2: [string, string?], winner: 1 | 2, status: Match["status"] = "confirmed"): Match => ({
@@ -69,5 +69,21 @@ describe("readiness", () => {
   it("maps the four 1–5 answers to 0–100 with soreness inverted", () => {
     expect(readiness({ sleep: 5, soreness: 1, energy: 5, mood: 5 })).toBe(100);
     expect(readiness({ sleep: 1, soreness: 5, energy: 1, mood: 1 })).toBe(0);
+  });
+});
+
+describe("generateCoachingPrompts", () => {
+  it("flags small sample sizes and win streaks", () => {
+    const players: Member[] = [
+      { id: "p1", full_name: "Aneesh", gender: "M", role: "player", activity_muted: false },
+      { id: "p2", full_name: "Raja", gender: "M", role: "player", activity_muted: false },
+    ];
+    const standings: Standing[] = [
+      { person_id: "p1", full_name: "Aneesh", gender: "M", rating: 1250, glicko: 1250, glicko_rd: 80, played: 4, won: 4, lost: 0, points_for: 84, points_against: 40, form: "WWWW", by_category: {} },
+      { person_id: "p2", full_name: "Raja", gender: "M", rating: 1200, glicko: 1200, glicko_rd: 300, played: 1, won: 0, lost: 1, points_for: 10, points_against: 21, form: "L", by_category: {} },
+    ];
+    const prompts = generateCoachingPrompts({ players, matches: [], standings });
+    expect(prompts.some((p) => p.type === "form" && p.personIds?.includes("p1"))).toBe(true);
+    expect(prompts.some((p) => p.type === "sample_size")).toBe(true);
   });
 });

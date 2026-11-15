@@ -1,4 +1,4 @@
-import type { Attendance, Drill, Match, Session, Wellness } from "./types";
+import type { Attendance, Drill, Match, Member, Session, Standing, Wellness } from "./types";
 
 const confirmed = (ms: Match[]) => ms.filter((m) => m.status === "confirmed");
 const sideOf = (m: Match, side: 1 | 2) =>
@@ -145,4 +145,120 @@ export function confidence(rd: number | null | undefined): { label: "High" | "Me
   if (rd < 110) return { label: "High", tone: "good" };
   if (rd < 200) return { label: "Medium", tone: "warn" };
   return { label: "Low", tone: "bad" };
+}
+
+// ───────── Actionable Coaching Prompts ─────────
+
+export interface CoachingPrompt {
+  id: string;
+  type: "sample_size" | "form" | "doubles_chemistry" | "fatigue" | "court_equity";
+  severity: "info" | "warn" | "success";
+  title: string;
+  description: string;
+  actionText?: string;
+  actionHref?: string;
+  personIds?: string[];
+}
+
+export function generateCoachingPrompts({
+  players,
+  matches,
+  standings,
+  load = [],
+  wellness = [],
+}: {
+  players: Member[];
+  matches: Match[];
+  standings: Standing[];
+  load?: LoadRow[];
+  wellness?: Wellness[];
+}): CoachingPrompt[] {
+  const prompts: CoachingPrompt[] = [];
+  const name = (id: string) => players.find((p) => p.id === id)?.full_name ?? "Player";
+
+  // 1. Fatigue & Workload Spikes
+  for (const l of load) {
+    if (l.spike) {
+      prompts.push({
+        id: `spike-${l.person_id}`,
+        type: "fatigue",
+        severity: "warn",
+        title: `Workload Spike: ${name(l.person_id)}`,
+        description: `Training load jumped over 50% week-on-week (${l.week} vs ${l.prevWeek}). Consider reduced court intensity to mitigate injury risk.`,
+        personIds: [l.person_id],
+      });
+    }
+  }
+
+  // 2. Daily Wellness / Readiness Warning
+  const today = new Date().toLocaleDateString("en-CA");
+  for (const w of wellness) {
+    if (w.day === today) {
+      const score = readiness(w);
+      if (score < 40) {
+        prompts.push({
+          id: `wellness-${w.person_id}`,
+          type: "fatigue",
+          severity: "warn",
+          title: `Low Readiness (${score}/100): ${name(w.person_id)}`,
+          description: `Player reported elevated fatigue or soreness today. Review readiness before scheduling high-intensity singles.`,
+          personIds: [w.person_id],
+        });
+      }
+    }
+  }
+
+  // 3. Doubles Chemistry
+  const pairs = pairStats(matches);
+  for (const p of pairs) {
+    if (p.played >= 2 && p.lift !== null) {
+      if (p.lift >= 0.2) {
+        prompts.push({
+          id: `chemistry-high-${p.a}-${p.b}`,
+          type: "doubles_chemistry",
+          severity: "success",
+          title: `Strong Doubles Synergy: ${name(p.a)} & ${name(p.b)}`,
+          description: `Partnership has +${Math.round(p.lift * 100)}% lift (${p.won}/${p.played} wins) compared to when playing separately. Strong candidate for selection.`,
+          personIds: [p.a, p.b],
+        });
+      } else if (p.lift <= -0.2) {
+        prompts.push({
+          id: `chemistry-low-${p.a}-${p.b}`,
+          type: "doubles_chemistry",
+          severity: "info",
+          title: `Struggling Partnership: ${name(p.a)} & ${name(p.b)}`,
+          description: `Partnership shows negative lift (${Math.round(p.lift * 100)}% over individual baselines). Trial alternative pairings in upcoming practice matches.`,
+          personIds: [p.a, p.b],
+        });
+      }
+    }
+  }
+
+  // 4. Form & Dominance
+  for (const s of standings) {
+    if (s.played >= 3 && s.form && (s.form.slice(-3) === "WWW" || s.won / s.played >= 0.8)) {
+      prompts.push({
+        id: `form-streak-${s.person_id}`,
+        type: "form",
+        severity: "success",
+        title: `High Momentum: ${name(s.person_id)} (${s.form})`,
+        description: `Won ${s.won} of ${s.played} matches. Test under pressure by matching against higher-rated players or handicap games.`,
+        personIds: [s.person_id],
+      });
+    }
+  }
+
+  // 5. Sample Size Reality Check
+  const smallSamplePlayers = standings.filter((s) => s.played === 1 || s.played === 2);
+  if (smallSamplePlayers.length > 0) {
+    prompts.push({
+      id: "sample-size-overview",
+      type: "sample_size",
+      severity: "info",
+      title: "Exploratory Sample Sizes",
+      description: `${smallSamplePlayers.length} player(s) have 2 or fewer matches recorded (${smallSamplePlayers.map((s) => name(s.person_id)).slice(0, 3).join(", ")}${smallSamplePlayers.length > 3 ? "..." : ""}). Treat early ratings as exploratory until 3+ matches are logged.`,
+    });
+  }
+
+  return prompts;
 }
