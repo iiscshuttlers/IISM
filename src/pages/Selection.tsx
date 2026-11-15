@@ -113,7 +113,7 @@ export default function SelectionPage() {
         <div className="w-full bg-surface-2 rounded-full h-2 overflow-hidden">
           <div
             className={`h-full transition-all duration-300 ${
-              selectedCount === camp.selection_target ? "bg-brand" : selectedCount > camp.selection_target ? "bg-red-500" : "bg-brand/70"
+              selectedCount === camp.selection_target ? "bg-brand" : selectedCount > camp.selection_target ? "bg-status-danger-text" : "bg-brand/70"
             }`}
             style={{ width: `${Math.min(100, (selectedCount / camp.selection_target) * 100)}%` }}
           />
@@ -142,7 +142,7 @@ export default function SelectionPage() {
 
       <div className="space-y-2">
         {rows.map((r) => (
-          <Card key={r.id} className={cx(r.decision === "selected" && "border-brand/60")}>
+          <Card key={r.id} className={cx(r.decision === "selected" && "border-brand-border bg-brand-pale/15")}>
             <div className="flex items-start justify-between gap-2">
               <div>
                 <button

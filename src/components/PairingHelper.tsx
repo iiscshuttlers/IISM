@@ -242,16 +242,16 @@ export function PairingHelperModal({
                 <Card key={idx} className="hover:border-brand/40 transition-colors">
                   <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-brand px-1.5 py-0.5 rounded bg-brand/10">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-brand px-2 py-0.5 rounded-full bg-brand-pale border border-brand-border">
                         {s.category}
                       </span>
                       {s.hasBackToBack && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-status-warn-bg text-status-warn-text border border-status-warn-border">
                           <Clock size={10} /> Back-to-back
                         </span>
                       )}
                       {s.allFresh && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-status-success-bg text-status-success-text border border-status-success-border">
                           <BatteryCharging size={10} /> Fresh
                         </span>
                       )}

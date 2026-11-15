@@ -74,7 +74,7 @@ export function MatchCard({ match: m, people, meId, isStaff, onEdit, onDispute, 
         );
       })}
       {m.status === "disputed" && m.dispute_reason && (
-        <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">
+        <p className="mt-2 rounded-xl bg-status-warn-bg px-2.5 py-1.5 text-xs font-medium text-status-warn-text border border-status-warn-border">
           Dispute ({name(m.disputed_by)}): {m.dispute_reason}
         </p>
       )}
@@ -91,7 +91,7 @@ export function MatchCard({ match: m, people, meId, isStaff, onEdit, onDispute, 
             <Button
               size="sm"
               variant="secondary"
-              className="text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200"
+              className="text-status-success-text bg-status-success-bg hover:opacity-90 border-status-success-border font-semibold"
               onClick={() => onResolve(m)}
             >
               <RotateCcw size={12} className="mr-1" />

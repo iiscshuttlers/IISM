@@ -17,7 +17,7 @@ export function Button({
         variant === "primary" && "bg-brand text-white hover:bg-brand-dark shadow-sm hover:shadow",
         variant === "secondary" && "bg-surface-2 text-ink border border-line hover:bg-surface-3",
         variant === "ghost" && "text-ink-soft hover:text-ink hover:bg-surface-2",
-        variant === "danger" && "bg-rose-600 text-white hover:bg-rose-700 shadow-sm",
+        variant === "danger" && "bg-red-600 text-white hover:bg-red-700 shadow-sm",
         className,
       )}
     />
@@ -135,8 +135,10 @@ export function Segmented<T extends string>({ value, options, onChange }: {
           type="button"
           onClick={() => onChange(o.value)}
           className={cx(
-            "flex-1 sm:flex-initial rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150 active:scale-[0.98]",
-            value === o.value ? "bg-surface text-ink shadow-sm font-bold" : "text-ink-soft hover:text-ink"
+            "flex-1 sm:flex-initial rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150 active:scale-[0.98] border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1",
+            value === o.value
+              ? "bg-brand-pale text-brand border-brand-border font-bold shadow-xs"
+              : "border-transparent text-ink-soft hover:text-ink hover:bg-surface/60"
           )}
         >
           {o.label}
@@ -149,12 +151,12 @@ export function Segmented<T extends string>({ value, options, onChange }: {
 export const Badge = ({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "good" | "warn" | "bad" | "brand" }) => (
   <span
     className={cx(
-      "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wide",
-      tone === "neutral" && "bg-surface-2 text-ink-soft border border-line/60",
-      tone === "good" && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25",
-      tone === "warn" && "bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25",
-      tone === "bad" && "bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/25",
-      tone === "brand" && "bg-brand/10 text-brand border border-brand/20",
+      "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wide border",
+      tone === "neutral" && "bg-surface-2 text-ink-soft border-line/70",
+      tone === "good" && "bg-status-success-bg text-status-success-text border-status-success-border",
+      tone === "warn" && "bg-status-warn-bg text-status-warn-text border-status-warn-border",
+      tone === "bad" && "bg-status-danger-bg text-status-danger-text border-status-danger-border",
+      tone === "brand" && "bg-brand-pale text-brand border-brand-border",
     )}
   >
     {children}

@@ -162,13 +162,13 @@ export default function SettingsPage() {
               }} />
             {editing.person_id !== s.meId && (
               <div className="pt-4 border-t border-line">
-                <p className="text-xs font-semibold text-red-600 mb-1">Danger Zone</p>
+                <p className="text-xs font-semibold text-status-danger-text mb-1">Danger Zone</p>
                 <p className="text-xs text-ink-soft mb-3">
                   Removing this person removes them from the roster and standings.
                 </p>
                 <Button
                   variant="ghost"
-                  className="w-full text-red-600 border border-red-200 hover:bg-red-50 flex items-center justify-center gap-1.5"
+                  className="w-full text-status-danger-text bg-status-danger-bg border border-status-danger-border hover:opacity-90 flex items-center justify-center gap-1.5"
                   onClick={() => setConfirmDeletePerson(editing)}
                 >
                   <Trash2 size={14} />

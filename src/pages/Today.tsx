@@ -109,10 +109,10 @@ export default function TodayPage() {
                   key={val}
                   type="button"
                   onClick={() => handleSetMyRpe(val)}
-                  className={`py-2 rounded font-bold text-xs transition-colors flex flex-col items-center justify-center border ${
+                  className={`py-2 rounded-xl font-bold text-xs transition-all flex flex-col items-center justify-center border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 active:scale-95 ${
                     selected
-                      ? "bg-brand text-white border-brand shadow-sm"
-                      : "bg-surface-2 text-ink border-line hover:border-brand/40"
+                      ? "bg-brand-pale text-brand border-brand-border font-black shadow-xs"
+                      : "bg-surface-2 text-ink border-line hover:border-brand-border hover:text-brand"
                   }`}
                 >
                   <span>{val}</span>

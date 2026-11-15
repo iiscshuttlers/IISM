@@ -248,14 +248,14 @@ export function MatchForm({ players, initial, submitLabel, onSubmit, busy, lockP
             <button
               type="button"
               onClick={() => setRows(rows.slice(0, -1))}
-              className="text-xs text-ink-soft hover:text-red-500"
+              className="text-xs text-ink-soft hover:text-status-danger-text"
             >
               – Remove Game {rows.length}
             </button>
           )}
         </div>
 
-        {parsed.error && <p className="mt-1 text-xs text-red-600">{parsed.error}</p>}
+        {parsed.error && <p className="mt-1 text-xs text-status-danger-text font-semibold">{parsed.error}</p>}
       </div>
 
       <div>
@@ -263,7 +263,7 @@ export function MatchForm({ players, initial, submitLabel, onSubmit, busy, lockP
           Winner {gamesWinner ? "(from scores)" : ""}
         </p>
         {gamesWinner ? (
-          <p className="rounded-lg bg-brand/10 px-3 py-2 text-sm font-semibold text-brand">{sideLabel(gamesWinner)}</p>
+          <p className="rounded-xl bg-brand-pale border border-brand-border px-3 py-2 text-sm font-bold text-brand">{sideLabel(gamesWinner)}</p>
         ) : (
           <div className={cx(!ready && "pointer-events-none opacity-50")}>
             <Segmented<"1" | "2" | "">

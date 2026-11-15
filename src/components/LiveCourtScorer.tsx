@@ -241,10 +241,10 @@ export function LiveCourtScorer({
                       setIsCustomPoints(false);
                     }}
                     className={cx(
-                      "flex-1 py-1.5 text-xs font-bold rounded-lg border transition",
+                      "flex-1 py-1.5 text-xs font-bold rounded-xl border transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1",
                       targetPoints === pts && !isCustomPoints
-                        ? "bg-brand text-white border-brand shadow-sm"
-                        : "bg-surface text-ink border-line hover:bg-line/40"
+                        ? "bg-brand-pale text-brand border-brand-border font-black shadow-xs"
+                        : "bg-surface text-ink-soft border-line hover:border-brand-border hover:text-ink"
                     )}
                   >
                     {pts} pts
@@ -254,10 +254,10 @@ export function LiveCourtScorer({
                   type="button"
                   onClick={() => setIsCustomPoints(true)}
                   className={cx(
-                    "px-2.5 py-1.5 text-xs font-bold rounded-lg border transition",
+                    "px-2.5 py-1.5 text-xs font-bold rounded-xl border transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1",
                     isCustomPoints
-                      ? "bg-brand text-white border-brand shadow-sm"
-                      : "bg-surface text-ink border-line hover:bg-line/40"
+                      ? "bg-brand-pale text-brand border-brand-border font-black shadow-xs"
+                      : "bg-surface text-ink-soft border-line hover:border-brand-border hover:text-ink"
                   )}
                 >
                   Custom
@@ -458,10 +458,10 @@ export function LiveCourtScorer({
                           toast.success(`Target points changed to ${p}`);
                         }}
                         className={cx(
-                          "flex-1 py-1 rounded font-bold border transition cursor-pointer",
+                          "flex-1 py-1 rounded-lg font-bold border transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 active:scale-95",
                           targetPoints === p
-                            ? "bg-brand text-white border-brand shadow-sm"
-                            : "bg-surface border-line hover:bg-line/40 text-ink"
+                            ? "bg-brand-pale text-brand border-brand-border font-black shadow-xs"
+                            : "bg-surface border-line hover:border-brand-border text-ink"
                         )}
                       >
                         {p}

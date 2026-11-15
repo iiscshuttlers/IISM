@@ -154,7 +154,7 @@ export default function StandingsPage() {
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs">
                       {r.points_for || r.points_against ? (
-                        <span className={ptsDiff > 0 ? "text-emerald-600 font-semibold" : ptsDiff < 0 ? "text-red-500 font-semibold" : "text-ink-soft"}>
+                        <span className={ptsDiff > 0 ? "text-status-success-text font-bold" : ptsDiff < 0 ? "text-status-danger-text font-bold" : "text-ink-soft"}>
                           {ptsDiff > 0 ? `+${ptsDiff}` : ptsDiff}
                         </span>
                       ) : (
@@ -167,8 +167,8 @@ export default function StandingsPage() {
                           r.form.split("").map((c, j) => (
                             <span
                               key={j}
-                              className={`w-4 h-4 rounded-full flex items-center justify-center font-bold text-[9px] text-white ${
-                                c === "W" ? "bg-emerald-600" : "bg-red-500"
+                              className={`w-4 h-4 rounded-full flex items-center justify-center font-bold text-[9px] text-white shadow-2xs ${
+                                c === "W" ? "bg-status-success-text" : "bg-status-danger-text"
                               }`}
                             >
                               {c}
@@ -224,7 +224,7 @@ export default function StandingsPage() {
 function ConfidenceDot({ rd }: { rd: number | undefined }) {
   if (rd === undefined) return null;
   const c = confidence(rd);
-  const color = c.tone === "good" ? "bg-emerald-500" : c.tone === "warn" ? "bg-amber-500" : "bg-red-500";
+  const color = c.tone === "good" ? "bg-status-success-text" : c.tone === "warn" ? "bg-status-warn-text" : "bg-status-danger-text";
   return (
     <span className="mt-0.5 flex items-center justify-end gap-1 text-[10px] font-medium text-ink-soft"
       title={`Rating confidence: ${c.label} (Glicko-2 deviation ±${rd})`}>

@@ -167,7 +167,7 @@ export function HeadToHeadModal({
                         <div className="flex items-center gap-2">
                           <span
                             className={`px-1.5 py-0.5 rounded font-bold text-[10px] text-white ${
-                              p1Won ? "bg-emerald-600" : "bg-red-500"
+                              p1Won ? "bg-status-success-text" : "bg-status-danger-text"
                             }`}
                           >
                             {p1Won ? `${p1.full_name.split(" ")[0]} won` : `${p2.full_name.split(" ")[0]} won`}

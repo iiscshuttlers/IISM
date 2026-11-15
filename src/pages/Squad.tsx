@@ -33,9 +33,9 @@ export default function SquadPage() {
 
       {/* Celebratory badge for selected players */}
       {isMeSelected && (
-        <Card className="border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-surface to-emerald-500/5">
-          <div className="flex items-center gap-2 font-bold text-sm text-emerald-800">
-            <Trophy size={18} className="text-emerald-600" />
+        <Card className="border-status-success-border bg-status-success-bg">
+          <div className="flex items-center gap-2 font-bold text-sm text-status-success-text">
+            <Trophy size={18} className="text-status-success-text" />
             <span>Congratulations! You made the squad</span>
           </div>
           <p className="text-xs text-ink-soft mt-1">
@@ -45,8 +45,8 @@ export default function SquadPage() {
       )}
 
       {isMeStandby && (
-        <Card className="border-amber-500/30 bg-amber-500/5">
-          <p className="font-semibold text-sm text-amber-900">You are on the Standby roster</p>
+        <Card className="border-status-warn-border bg-status-warn-bg">
+          <p className="font-semibold text-sm text-status-warn-text">You are on the Standby roster</p>
           <p className="text-xs text-ink-soft mt-0.5">Stay match-ready and keep up training sessions.</p>
         </Card>
       )}

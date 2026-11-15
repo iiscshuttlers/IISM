@@ -11,7 +11,7 @@ import { MatchCard } from "../components/MatchCard";
 import { PairingHelperModal } from "../components/PairingHelper";
 import { LiveCourtScorer } from "../components/LiveCourtScorer";
 import { TournamentGeneratorModal } from "../components/TournamentGenerator";
-import { Button, ConfirmDialog, Empty, Field, Input, PageTitle, Segmented, Sheet, Textarea } from "../components/ui";
+import { Button, ConfirmDialog, Empty, Field, Input, PageTitle, Segmented, Sheet, Textarea, cx } from "../components/ui";
 import type { Category } from "../lib/scores";
 import type { Match } from "../lib/types";
 
@@ -218,11 +218,12 @@ export default function MatchesPage() {
               key={cat}
               type="button"
               onClick={() => setCatFilter(cat)}
-              className={`px-2.5 py-1 rounded-full font-bold uppercase tracking-wider transition-colors border ${
+              className={cx(
+                "px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-150 border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 active:scale-95",
                 catFilter === cat
-                  ? "bg-brand text-white border-brand shadow-xs"
-                  : "bg-surface text-ink-soft border-line hover:border-brand/40"
-              }`}
+                  ? "bg-brand-pale text-brand border-brand-border shadow-xs font-black"
+                  : "bg-surface text-ink-soft border-line hover:border-brand-border hover:text-ink"
+              )}
             >
               {cat}
             </button>
@@ -238,14 +239,14 @@ export default function MatchesPage() {
               ? `${nm(p.input.slots[0])} & ${nm(p.input.slots[1])} v ${nm(p.input.slots[2])} & ${nm(p.input.slots[3])}`
               : `${nm(p.input.slots[0])} v ${nm(p.input.slots[2])}`;
             return (
-              <div key={p.clientId} className="rounded-xl border border-dashed border-amber-400 bg-amber-50 p-3 text-sm dark:bg-amber-900/20">
-                <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-900 dark:text-amber-200">
+              <div key={p.clientId} className="rounded-xl border border-dashed border-status-warn-border bg-status-warn-bg p-3 text-sm">
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-status-warn-text">
                   <CloudOff size={13} /> {p.error ? "Couldn't save" : "Waiting to send"} · {p.input.category}
                 </p>
                 <p className="mt-1 text-ink">{sides}</p>
                 {p.error && (
                   <div className="mt-2 flex items-center gap-2">
-                    <span className="flex-1 text-xs text-red-600">{errorText({ message: p.error })}</span>
+                    <span className="flex-1 text-xs text-status-danger-text font-medium">{errorText({ message: p.error })}</span>
                     <Button size="sm" variant="secondary" onClick={() => outbox.retry(p.clientId)}>Retry</Button>
                     <Button size="sm" variant="ghost" onClick={() => outbox.remove(p.clientId)}>Discard</Button>
                   </div>

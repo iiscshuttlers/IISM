@@ -104,16 +104,16 @@ function Shell({ children }: { children: ReactNode }) {
             <Sun size={19} />
           </button>
           <Link href="/activity" aria-label={`Activity${unread ? `, ${unread} unread` : ""}`}
-            className="relative rounded-xl p-2 text-ink-soft transition hover:bg-surface-2 hover:text-ink">
+            className="relative rounded-xl p-2 text-ink-soft transition hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
             <Bell size={19} />
             {unread > 0 && (
-              <span className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-600 px-1 text-center text-[10px] font-bold text-white shadow-xs animate-pulse">
+              <span className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-600 px-1 text-center text-[10px] font-bold text-white shadow-xs animate-pulse">
                 {unread > 99 ? "99+" : unread}
               </span>
             )}
           </Link>
           {s.isAdmin && (
-            <Link href="/settings" aria-label="Camp settings" className="rounded-xl p-2 text-ink-soft transition hover:bg-surface-2 hover:text-ink">
+            <Link href="/settings" aria-label="Camp settings" className="rounded-xl p-2 text-ink-soft transition hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
               <Settings size={19} />
             </Link>
           )}
@@ -122,7 +122,7 @@ function Shell({ children }: { children: ReactNode }) {
             size="sm"
             onClick={() => setConfirmSignOut(true)}
             aria-label="Sign out"
-            className="!min-h-[36px] !px-2 text-ink-soft hover:text-rose-600"
+            className="!min-h-[36px] !px-2 text-ink-soft hover:text-red-600"
           >
             <LogOut size={18} />
           </Button>
@@ -133,7 +133,7 @@ function Shell({ children }: { children: ReactNode }) {
 
       <main className="px-3.5 sm:px-4 py-4 sm:py-5">{children}</main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line/80 bg-surface/95 backdrop-blur-md pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur-md pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
         <div className="mx-auto grid max-w-3xl grid-cols-5 px-1 py-1">
           {nav.map(({ href, label, icon: Icon }) => {
             const active = href === "/" ? loc === "/" : loc.startsWith(href);
@@ -142,7 +142,7 @@ function Shell({ children }: { children: ReactNode }) {
                 key={href}
                 href={href}
                 className={cx(
-                  "flex flex-col items-center justify-center py-1 min-h-[48px] text-[11px] font-medium transition-all duration-150 rounded-xl",
+                  "flex flex-col items-center justify-center py-1 min-h-[48px] text-[11px] font-medium transition-all duration-150 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1",
                   active
                     ? "text-brand font-bold"
                     : "text-ink-soft hover:text-ink"
@@ -150,8 +150,10 @@ function Shell({ children }: { children: ReactNode }) {
               >
                 <span
                   className={cx(
-                    "flex items-center justify-center w-11 h-7 rounded-full transition-all duration-200",
-                    active ? "bg-brand/12 text-brand dark:bg-brand/25 shadow-xs" : ""
+                    "flex items-center justify-center w-11 h-7 rounded-full transition-all duration-200 border",
+                    active
+                      ? "bg-brand-pale text-brand border-brand-border shadow-xs"
+                      : "border-transparent text-ink-soft"
                   )}
                 >
                   <Icon size={19} strokeWidth={active ? 2.5 : 2} />

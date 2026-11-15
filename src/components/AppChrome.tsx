@@ -28,7 +28,7 @@ export function ConnectionBar({ campId }: { campId: string }) {
   const waiting = pending.filter((p) => !p.error).length;
   if (online && waiting === 0) return null;
   return (
-    <div role="status" className="flex items-center gap-2 bg-amber-100 px-4 py-1.5 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
+    <div role="status" className="flex items-center gap-2 bg-status-warn-bg px-4 py-1.5 text-xs font-semibold text-status-warn-text border-b border-status-warn-border">
       <CloudOff size={14} />
       {online
         ? `Sending ${waiting} saved result${waiting === 1 ? "" : "s"}…`

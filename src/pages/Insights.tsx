@@ -171,7 +171,7 @@ function Pairs({ campId }: { campId: string }) {
                   <td className="px-3 py-2 text-right tabular-nums">{p.won} / {p.played}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{Math.round((100 * p.won) / p.played)}%</td>
                   <td className={cx("px-3 py-2 text-right tabular-nums font-semibold",
-                    p.lift == null ? "text-ink-soft" : p.lift > 0.05 ? "text-emerald-600" : p.lift < -0.05 ? "text-red-500" : "text-ink")}>
+                    p.lift == null ? "text-ink-soft" : p.lift > 0.05 ? "text-status-success-text" : p.lift < -0.05 ? "text-status-danger-text" : "text-ink")}>
                     {p.lift == null ? "—" : `${p.lift > 0 ? "+" : ""}${Math.round(p.lift * 100)}%`}
                   </td>
                 </tr>
@@ -214,11 +214,11 @@ function Load({ campId }: { campId: string }) {
         a common injury warning sign. Readiness comes from each player's daily check-in (sleep, soreness, energy, mood).
       </p>
       {flagged.length > 0 && (
-        <Card className="border-amber-400/60 bg-amber-50 dark:bg-amber-900/20">
-          <p className="mb-1 flex items-center gap-1.5 text-sm font-bold text-amber-900 dark:text-amber-200">
+        <Card className="border-status-warn-border bg-status-warn-bg">
+          <p className="mb-1 flex items-center gap-1.5 text-sm font-bold text-status-warn-text">
             <AlertTriangle size={16} /> Check in with
           </p>
-          <ul className="text-sm text-amber-900 dark:text-amber-100">
+          <ul className="text-sm text-status-warn-text">
             {flagged.map((r) => (
               <li key={r.p.id}>
                 {r.p.full_name}
@@ -250,7 +250,7 @@ function Load({ campId }: { campId: string }) {
                   <td className="px-3 py-2 text-right tabular-nums text-ink-soft">{l?.prevWeek ?? 0}</td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {score === null ? <span className="text-ink-soft">—</span> : (
-                      <span className={cx("font-semibold", score < 40 ? "text-red-500" : score < 65 ? "text-amber-600" : "text-emerald-600")}>
+                      <span className={cx("font-semibold", score < 40 ? "text-status-danger-text" : score < 65 ? "text-status-warn-text" : "text-status-success-text")}>
                         {score}
                         {!fresh && latest && <span className="ml-1 text-[10px] font-normal text-ink-soft">{fmtDate(latest.day)}</span>}
                       </span>
