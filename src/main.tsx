@@ -19,8 +19,9 @@ const queryClient = new QueryClient({
 });
 
 // Keeps the last-seen camp data on the phone so the app opens courtside with no signal.
-// Admin-only and sensitive data (emails, assessments, wellness) is never written to storage.
-const NOT_PERSISTED = new Set(["rosterAdmin", "assessments", "wellness", "selection"]);
+// Admin-only and sensitive data (emails, assessments, wellness, injury reports, reflections) is
+// never written to storage.
+const NOT_PERSISTED = new Set(["rosterAdmin", "assessments", "wellness", "selection", "injuries", "reflections"]);
 const persister = createSyncStoragePersister({
   storage: typeof window === "undefined" ? undefined : window.localStorage,
   key: CACHE_KEY,

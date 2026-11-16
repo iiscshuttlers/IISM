@@ -9,18 +9,24 @@ const overlayStack: string[] = [];
 let overlaySeq = 0;
 let bodyOverflowBefore = "";
 
-/** Stops the next popstate (the one our own history.back() causes) reaching anyone else. */
-function swallowNextPop() {
-  const done = () => {
-    window.removeEventListener("popstate", swallow, true);
+/** Pops still to come from our own history.back() calls; overlays ignore those. */
+let ownPops = 0;
+
+/** history.back() whose popstate the overlay listeners ignore (it only removes our own entry). */
+function ownBack() {
+  ownPops++;
+  let settled = false;
+  const settle = () => {
+    if (settled) return;
+    settled = true;
+    window.removeEventListener("popstate", settle);
     window.clearTimeout(timer);
+    // Clear the flag only after every listener for this popstate has seen it.
+    window.setTimeout(() => { ownPops = Math.max(0, ownPops - 1); }, 0);
   };
-  const swallow = (e: Event) => {
-    e.stopImmediatePropagation();
-    done();
-  };
-  const timer = window.setTimeout(done, 1000);
-  window.addEventListener("popstate", swallow, true);
+  const timer = window.setTimeout(settle, 1000); // in case the browser never fires it
+  window.addEventListener("popstate", settle);
+  window.history.back();
 }
 
 /**
@@ -33,7 +39,8 @@ export function useOverlayDismiss(open: boolean, onClose: () => void) {
 
   useEffect(() => {
     if (!open || typeof window === "undefined") return;
-    const id = `overlay-${++overlaySeq}`;
+    // Unique across reloads too: a reloaded page can sit on an entry an earlier overlay pushed.
+    const id = `${Date.now().toString(36)}-${++overlaySeq}`;
     overlayStack.push(id);
     const isTop = () => overlayStack[overlayStack.length - 1] === id;
 
@@ -52,7 +59,7 @@ export function useOverlayDismiss(open: boolean, onClose: () => void) {
     }, 0);
 
     const onPop = () => {
-      if (pushed && isTop()) {
+      if (ownPops === 0 && pushed && isTop()) {
         closedByBack = true;
         closeRef.current();
       }
@@ -73,10 +80,7 @@ export function useOverlayDismiss(open: boolean, onClose: () => void) {
       overlayStack.splice(overlayStack.indexOf(id), 1);
       if (overlayStack.length === 0) document.body.style.overflow = bodyOverflowBefore;
       // Closed with ✕, Cancel or Save: drop our entry so Back still leaves the page next time.
-      if (pushed && !closedByBack && window.history.state?.overlay === id) {
-        swallowNextPop();
-        window.history.back();
-      }
+      if (pushed && !closedByBack && window.history.state?.overlay === id) ownBack();
     };
   }, [open]);
 }

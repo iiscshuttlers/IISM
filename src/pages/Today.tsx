@@ -32,7 +32,7 @@ import { LiveCourtBoard } from "../components/LiveCourtBoard";
 import { QuickCommandPalette } from "../components/QuickCommandPalette";
 import { PlayerDetailSheet } from "../components/PlayerDetail";
 import { shareDailyScheduleOnWhatsApp } from "../lib/whatsappShare";
-import { getWeatherVenuePlan } from "../lib/campExtended";
+import { useVenuePlan } from "../lib/sharedData";
 import { Avatar, Badge, Button, Card, Empty, fmtDate, today } from "../components/ui";
 import { DRILL_TYPES } from "../lib/types";
 import { WellnessCheckin } from "../components/WellnessCheckin";
@@ -61,6 +61,7 @@ export default function TodayPage() {
   const assessments = useAssessments(campId, s.isStaff);
   const trainingMut = useTrainingMutations(campId);
   const matchMut = useMatchMutations(campId);
+  const venuePlan = useVenuePlan(campId);
 
   const matches = useMatches(campId);
   const members = useMembers(campId);
@@ -100,7 +101,7 @@ export default function TodayPage() {
     if (!s.meId) return;
     if (!todaySession) {
       // Auto-create session if none exists
-      trainingMut.addSession.mutate(
+      trainingMut.ensureSession.mutate(
         {
           session_date: today(),
           title: "Today's Training & Matches",
@@ -158,7 +159,7 @@ export default function TodayPage() {
   };
 
   const handleStartTodaySession = () => {
-    trainingMut.addSession.mutate(
+    trainingMut.ensureSession.mutate(
       {
         session_date: today(),
         title: "Today's Training & Matches",
@@ -190,7 +191,7 @@ export default function TodayPage() {
     };
 
     if (!todaySession) {
-      trainingMut.addSession.mutate(
+      trainingMut.ensureSession.mutate(
         {
           session_date: today(),
           title: "Today's Training & Matches",
@@ -233,7 +234,7 @@ export default function TodayPage() {
     };
 
     if (!todaySession) {
-      trainingMut.addSession.mutate(
+      trainingMut.ensureSession.mutate(
         {
           session_date: today(),
           title: "Today's Training & Matches",
@@ -358,7 +359,7 @@ export default function TodayPage() {
                 shareDailyScheduleOnWhatsApp({
                   campName: s.camp?.name ?? "IISc Badminton Camp",
                   session: todaySession,
-                  weatherPlan: getWeatherVenuePlan(campId),
+                  weatherPlan: venuePlan.data ?? null,
                   presentCount,
                   totalSquad: playerMembers.length,
                 });

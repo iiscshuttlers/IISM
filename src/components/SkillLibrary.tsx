@@ -1,13 +1,10 @@
-import { useState, useMemo, useEffect } from "react";
-import { BookOpen, Search, Filter, Plus, Target, Check, AlertTriangle, Dumbbell } from "lucide-react";
+import { useState, useMemo } from "react";
+import { BookOpen, Search, Filter, Plus, Target, Check, AlertTriangle, Dumbbell, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Badge, Button, Card, Sheet } from "./ui";
-import {
-  getSkillLibrary,
-  saveCustomSkill,
-  saveNextSessionFocus,
-  type SkillTechnique,
-} from "../lib/campExtended";
+import { Badge, Button, Card, ConfirmDialog, Sheet } from "./ui";
+import { DEFAULT_SKILLS, type SkillTechnique } from "../lib/campExtended";
+import { errorText } from "../lib/supabase";
+import { useCustomSkillMutations, useCustomSkills, useNextFocusMutations } from "../lib/sharedData";
 
 export function SkillLibrarySheet({
   open,
@@ -22,7 +19,12 @@ export function SkillLibrarySheet({
   currentPersonId?: string | null;
   isStaff?: boolean;
 }) {
-  const [skills, setSkills] = useState<SkillTechnique[]>([]);
+  // Built-in techniques plus the ones this camp's coaches added (shared with everyone).
+  const customQ = useCustomSkills(open ? campId : undefined);
+  const customMut = useCustomSkillMutations(campId);
+  const focusMut = useNextFocusMutations(campId);
+  const skills = useMemo(() => [...DEFAULT_SKILLS, ...(customQ.data ?? [])], [customQ.data]);
+  const [deleting, setDeleting] = useState<SkillTechnique | null>(null);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>("ALL");
   const [difficulty, setDifficulty] = useState<string>("ALL");
@@ -36,16 +38,6 @@ export function SkillLibrarySheet({
   const [newCues, setNewCues] = useState("");
   const [newMistakes, setNewMistakes] = useState("");
   const [newDrill, setNewDrill] = useState("");
-
-  const refresh = () => {
-    if (campId) {
-      setSkills(getSkillLibrary(campId));
-    }
-  };
-
-  useEffect(() => {
-    refresh();
-  }, [campId, open]);
 
   const filteredSkills = useMemo(() => {
     return skills.filter((s) => {
@@ -69,9 +61,14 @@ export function SkillLibrarySheet({
       toast.error("Please identify as a player first.");
       return;
     }
-    const focusText = `Practice ${skill.title}: ${skill.key_cues[0] || skill.description}`;
-    saveNextSessionFocus(campId, currentPersonId, focusText, "Skill Library");
-    toast.success(`Set as next session focus: ${skill.title}`);
+    const focusText = `Practice ${skill.title}: ${skill.key_cues[0] || skill.description}`.slice(0, 300);
+    focusMut.set.mutate(
+      { personId: currentPersonId, text: focusText, source: "skill_library" },
+      {
+        onSuccess: () => toast.success(`Set as next session focus: ${skill.title}`),
+        onError: (e) => toast.error(errorText(e)),
+      },
+    );
   };
 
   const handleAddCustom = (e: React.FormEvent) => {
@@ -80,31 +77,41 @@ export function SkillLibrarySheet({
       toast.error("Please fill in title and description.");
       return;
     }
+    const lines = (s: string) => s.split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 20);
 
-    saveCustomSkill(campId, {
-      title: newTitle.trim(),
-      category: newCategory,
-      difficulty: newDifficulty,
-      description: newDesc.trim(),
-      key_cues: newCues
-        .split("\n")
-        .map((c) => c.trim())
-        .filter(Boolean),
-      common_mistakes: newMistakes
-        .split("\n")
-        .map((m) => m.trim())
-        .filter(Boolean),
-      suggested_drill: newDrill.trim() || "Practice in 10-minute focused sets.",
+    customMut.add.mutate(
+      {
+        title: newTitle.trim(),
+        category: newCategory,
+        difficulty: newDifficulty,
+        description: newDesc.trim(),
+        key_cues: lines(newCues),
+        common_mistakes: lines(newMistakes),
+        suggested_drill: newDrill.trim() || "Practice in 10-minute focused sets.",
+      },
+      {
+        onSuccess: () => {
+          toast.success("New technique & drill added for the whole camp");
+          setAddingCustom(false);
+          setNewTitle("");
+          setNewDesc("");
+          setNewCues("");
+          setNewMistakes("");
+          setNewDrill("");
+        },
+        onError: (err) => toast.error(errorText(err)),
+      },
+    );
+  };
+
+  const handleDelete = () => {
+    if (!deleting) return;
+    const s = deleting;
+    setDeleting(null);
+    customMut.remove.mutate(s.id, {
+      onSuccess: () => toast.success(`${s.title} removed from the library`),
+      onError: (err) => toast.error(errorText(err)),
     });
-
-    toast.success("New technique & drill added to library!");
-    setAddingCustom(false);
-    setNewTitle("");
-    setNewDesc("");
-    setNewCues("");
-    setNewMistakes("");
-    setNewDrill("");
-    refresh();
   };
 
   return (
@@ -231,8 +238,8 @@ export function SkillLibrarySheet({
               />
             </div>
 
-            <Button size="sm" type="submit" className="w-full">
-              Save to Skill Library
+            <Button size="sm" type="submit" className="w-full" disabled={customMut.add.isPending}>
+              {customMut.add.isPending ? "Saving…" : "Save to Skill Library"}
             </Button>
           </form>
         )}
@@ -315,18 +322,31 @@ export function SkillLibrarySheet({
                     <p className="text-xs text-ink-soft mt-1">{skill.description}</p>
                   </div>
 
-                  {currentPersonId && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => handleSetFocus(skill)}
-                      className="shrink-0 text-xs"
-                      title="Set this technique as your focus for next practice"
-                    >
-                      <Target size={13} className="mr-1 text-brand" />
-                      Focus Next
-                    </Button>
-                  )}
+                  <div className="flex shrink-0 items-center gap-1">
+                    {currentPersonId && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleSetFocus(skill)}
+                        disabled={focusMut.set.isPending}
+                        className="text-xs"
+                        title="Set this technique as your focus for next practice"
+                      >
+                        <Target size={13} className="mr-1 text-brand" />
+                        Focus Next
+                      </Button>
+                    )}
+                    {isStaff && skill.is_custom && (
+                      <button
+                        type="button"
+                        onClick={() => setDeleting(skill)}
+                        className="p-1.5 text-ink-soft hover:text-red-600"
+                        aria-label={`Delete ${skill.title}`}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Key Coaching Cues */}
@@ -373,6 +393,15 @@ export function SkillLibrarySheet({
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!deleting}
+        title={`Remove ${deleting?.title ?? "this technique"}?`}
+        message="It disappears from the skill library for everyone in the camp."
+        confirmLabel="Remove"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleting(null)}
+      />
     </Sheet>
   );
 }

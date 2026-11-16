@@ -1,12 +1,17 @@
-import { useState, useEffect } from "react";
-import { CloudSun, Wind, AlertCircle, Edit2, CheckCircle } from "lucide-react";
+import { useState } from "react";
+import { CloudSun, Wind, AlertCircle, Edit2, CheckCircle, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { Badge, Button, Card, Sheet } from "./ui";
-import {
-  getWeatherVenuePlan,
-  saveWeatherVenuePlan,
-  type WeatherVenuePlan,
-} from "../lib/campExtended";
+import { useMembers } from "../lib/api";
+import { errorText } from "../lib/supabase";
+import { useSaveVenuePlan, useVenuePlan, type VenuePlan } from "../lib/sharedData";
+
+const PLAN_LABEL: Record<VenuePlan["plan_type"], string> = {
+  indoor_regular: "Indoor Plan (Active)",
+  indoor_backup: "Rain Contingency Plan",
+  outdoor_relocated: "Track Relocated",
+  heat_warning: "Heat Advisory",
+};
 
 export function WeatherVenueBanner({
   campId,
@@ -15,32 +20,36 @@ export function WeatherVenueBanner({
   campId: string;
   isStaff?: boolean;
 }) {
-  const [plan, setPlan] = useState<WeatherVenuePlan | null>(null);
+  const planQ = useVenuePlan(campId);
+  const members = useMembers(campId);
+  const plan = planQ.data ?? null;
   const [editOpen, setEditOpen] = useState(false);
 
-  const refresh = () => {
-    if (campId) {
-      setPlan(getWeatherVenuePlan(campId));
-    }
-  };
+  if (planQ.isLoading) return null;
 
-  useEffect(() => {
-    refresh();
-    const handleStorageChange = () => refresh();
-    window.addEventListener("iism_extended_change", handleStorageChange);
-    return () => window.removeEventListener("iism_extended_change", handleStorageChange);
-  }, [campId]);
-
-  if (!plan) return null;
+  // Nothing posted yet: players see nothing; coaches get a quiet prompt to post one.
+  if (!plan) {
+    if (!isStaff) return null;
+    return (
+      <>
+        <Card className="flex items-center justify-between gap-3 border-dashed bg-surface-2/40 p-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <MapPin size={16} className="shrink-0 text-ink-soft" />
+            <p className="text-xs text-ink-soft">No venue or conditions notice for players yet.</p>
+          </div>
+          <Button size="sm" variant="secondary" onClick={() => setEditOpen(true)} className="shrink-0 text-xs">
+            Post notice
+          </Button>
+        </Card>
+        <WeatherPlanEditModal open={editOpen} onClose={() => setEditOpen(false)} campId={campId} currentPlan={null} />
+      </>
+    );
+  }
 
   const isRelocated = plan.plan_type === "indoor_backup" || plan.plan_type === "outdoor_relocated";
   const isHeatWarning = plan.plan_type === "heat_warning";
-
-  const getTone = (): "brand" | "warn" | "bad" => {
-    if (isHeatWarning) return "bad";
-    if (isRelocated) return "warn";
-    return "brand";
-  };
+  const tone: "brand" | "warn" | "bad" = isHeatWarning ? "bad" : isRelocated ? "warn" : "brand";
+  const setBy = (members.data ?? []).find((m) => m.id === (plan.updated_by ?? plan.created_by))?.full_name ?? "Camp staff";
 
   return (
     <>
@@ -69,27 +78,23 @@ export function WeatherVenueBanner({
 
             <div className="space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <Badge tone={getTone()}>
-                  {plan.plan_type === "indoor_regular"
-                    ? "Indoor Plan (Active)"
-                    : plan.plan_type === "indoor_backup"
-                    ? "Rain Contingency Plan"
-                    : plan.plan_type === "outdoor_relocated"
-                    ? "Track Relocated"
-                    : "Heat Advisory"}
-                </Badge>
+                <Badge tone={tone}>{PLAN_LABEL[plan.plan_type]}</Badge>
                 <span className="font-bold text-xs text-ink">{plan.venue_name}</span>
                 <span className="text-[11px] text-ink-soft font-mono flex items-center gap-1">
                   <Wind size={11} /> Shuttle: <strong>{plan.shuttle_speed}</strong>
                 </span>
               </div>
 
-              <p className="text-xs text-ink font-medium">{plan.athlete_notice}</p>
+              {plan.athlete_notice && <p className="text-xs text-ink font-medium">{plan.athlete_notice}</p>}
 
-              <div className="flex items-center gap-3 text-[11px] text-ink-soft">
-                <span>{plan.weather_summary}</span>
-                <span>·</span>
-                <span>Set by {plan.updated_by}</span>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-ink-soft">
+                {plan.weather_summary && (
+                  <>
+                    <span>{plan.weather_summary}</span>
+                    <span>·</span>
+                  </>
+                )}
+                <span>Set by {setBy}</span>
               </div>
             </div>
           </div>
@@ -109,14 +114,12 @@ export function WeatherVenueBanner({
         </div>
       </Card>
 
-      {/* Staff Editor Modal */}
       {isStaff && (
         <WeatherPlanEditModal
+          // Re-seed the form whenever someone else changes the plan.
+          key={plan.updated_at ?? plan.created_at}
           open={editOpen}
-          onClose={() => {
-            setEditOpen(false);
-            refresh();
-          }}
+          onClose={() => setEditOpen(false)}
           campId={campId}
           currentPlan={plan}
         />
@@ -134,29 +137,33 @@ export function WeatherPlanEditModal({
   open: boolean;
   onClose: () => void;
   campId: string;
-  currentPlan: WeatherVenuePlan;
+  currentPlan: VenuePlan | null;
 }) {
-  const [planType, setPlanType] = useState(currentPlan.plan_type);
-  const [venueName, setVenueName] = useState(currentPlan.venue_name);
-  const [weatherSummary, setWeatherSummary] = useState(currentPlan.weather_summary);
-  const [shuttleSpeed, setShuttleSpeed] = useState(currentPlan.shuttle_speed);
-  const [athleteNotice, setAthleteNotice] = useState(currentPlan.athlete_notice);
-  const [updatedBy, setUpdatedBy] = useState(currentPlan.updated_by || "Head Coach");
+  const save = useSaveVenuePlan(campId);
+  const [planType, setPlanType] = useState<VenuePlan["plan_type"]>(currentPlan?.plan_type ?? "indoor_regular");
+  const [venueName, setVenueName] = useState(currentPlan?.venue_name ?? "");
+  const [weatherSummary, setWeatherSummary] = useState(currentPlan?.weather_summary ?? "");
+  const [shuttleSpeed, setShuttleSpeed] = useState<VenuePlan["shuttle_speed"]>(currentPlan?.shuttle_speed ?? "77 (Medium)");
+  const [athleteNotice, setAthleteNotice] = useState(currentPlan?.athlete_notice ?? "");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    saveWeatherVenuePlan(campId, {
-      camp_id: campId,
-      plan_type: planType,
-      venue_name: venueName.trim(),
-      weather_summary: weatherSummary.trim(),
-      shuttle_speed: shuttleSpeed,
-      athlete_notice: athleteNotice.trim(),
-      updated_by: updatedBy.trim() || "Staff",
-      updated_at: new Date().toISOString(),
-    });
-    toast.success("Venue & weather plan updated for all players!");
-    onClose();
+    save.mutate(
+      {
+        plan_type: planType,
+        venue_name: venueName.trim(),
+        weather_summary: weatherSummary.trim(),
+        shuttle_speed: shuttleSpeed,
+        athlete_notice: athleteNotice.trim(),
+      },
+      {
+        onSuccess: () => {
+          toast.success("Venue & conditions updated for everyone");
+          onClose();
+        },
+        onError: (err) => toast.error(errorText(err)),
+      },
+    );
   };
 
   return (
@@ -164,13 +171,15 @@ export function WeatherPlanEditModal({
       <form onSubmit={handleSubmit} className="space-y-4">
         <p className="text-xs text-ink-soft">
           Keep the squad informed of court conditions, weather relocations, and equipment recommendations.
+          Everyone in the camp sees this on their Today page.
         </p>
 
         <div>
-          <label className="text-xs font-semibold text-ink-soft block mb-1">Plan Condition</label>
+          <label htmlFor="venue-plan-type" className="text-xs font-semibold text-ink-soft block mb-1">Plan Condition</label>
           <select
+            id="venue-plan-type"
             value={planType}
-            onChange={(e) => setPlanType(e.target.value as WeatherVenuePlan["plan_type"])}
+            onChange={(e) => setPlanType(e.target.value as VenuePlan["plan_type"])}
             className="w-full text-xs rounded-lg border border-line bg-surface px-3 py-2 text-ink"
           >
             <option value="indoor_regular">Indoor Courts Normal (No issues)</option>
@@ -181,10 +190,12 @@ export function WeatherPlanEditModal({
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-ink-soft block mb-1">Active Venue / Courts</label>
+          <label htmlFor="venue-plan-name" className="text-xs font-semibold text-ink-soft block mb-1">Active Venue / Courts</label>
           <input
+            id="venue-plan-name"
             type="text"
             required
+            maxLength={120}
             value={venueName}
             onChange={(e) => setVenueName(e.target.value)}
             placeholder="e.g. IISc Gymkhana Indoor Hall (Courts 1–4)"
@@ -194,10 +205,11 @@ export function WeatherPlanEditModal({
 
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="text-xs font-semibold text-ink-soft block mb-1">Atmosphere / Temperature</label>
+            <label htmlFor="venue-plan-weather" className="text-xs font-semibold text-ink-soft block mb-1">Atmosphere / Temperature</label>
             <input
+              id="venue-plan-weather"
               type="text"
-              required
+              maxLength={200}
               value={weatherSummary}
               onChange={(e) => setWeatherSummary(e.target.value)}
               placeholder="e.g. Indoor 26°C · 70% Humidity"
@@ -206,10 +218,11 @@ export function WeatherPlanEditModal({
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-ink-soft block mb-1">Recommended Shuttle Speed</label>
+            <label htmlFor="venue-plan-shuttle" className="text-xs font-semibold text-ink-soft block mb-1">Recommended Shuttle Speed</label>
             <select
+              id="venue-plan-shuttle"
               value={shuttleSpeed}
-              onChange={(e) => setShuttleSpeed(e.target.value as WeatherVenuePlan["shuttle_speed"])}
+              onChange={(e) => setShuttleSpeed(e.target.value as VenuePlan["shuttle_speed"])}
               className="w-full text-xs rounded-lg border border-line bg-surface px-3 py-2 text-ink"
             >
               <option value="76 (Slow)">76 (Slow - Warm / High Humidity)</option>
@@ -221,12 +234,13 @@ export function WeatherPlanEditModal({
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-ink-soft block mb-1">
-            Player Guidance Notice <span className="text-status-danger-text">*</span>
+          <label htmlFor="venue-plan-notice" className="text-xs font-semibold text-ink-soft block mb-1">
+            Player Guidance Notice
           </label>
           <textarea
-            required
+            id="venue-plan-notice"
             rows={3}
+            maxLength={1000}
             value={athleteNotice}
             onChange={(e) => setAthleteNotice(e.target.value)}
             placeholder="e.g. Rain expected: Bring dry change of socks, indoor court shoes only. Sprints moved inside."
@@ -234,19 +248,9 @@ export function WeatherPlanEditModal({
           />
         </div>
 
-        <div>
-          <label className="text-xs font-semibold text-ink-soft block mb-1">Staff Member Name</label>
-          <input
-            type="text"
-            value={updatedBy}
-            onChange={(e) => setUpdatedBy(e.target.value)}
-            className="w-full text-xs rounded-lg border border-line bg-surface px-3 py-2 text-ink"
-          />
-        </div>
-
-        <Button type="submit" className="w-full">
+        <Button type="submit" className="w-full" disabled={save.isPending}>
           <CheckCircle size={14} className="mr-1.5" />
-          <span>Save & Broadcast Venue Plan</span>
+          <span>{save.isPending ? "Saving…" : "Save & Share With Camp"}</span>
         </Button>
       </form>
     </Sheet>

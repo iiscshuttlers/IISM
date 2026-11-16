@@ -416,6 +416,19 @@ export function useCourtMutations(campId: string) {
   };
 }
 
+// ───────── Backup ─────────
+
+/** Every shared-feature row this user can see for the camp (coaches and the admin see all). */
+export async function fetchSharedBackup(campId: string) {
+  const all = async (table: string) => must(await supabase.from(table).select("*").eq("camp_id", campId)) as unknown[];
+  const [announcements, goals, equipment, injuries, reflections, customSkills, venuePlans, courts, nextSessionFocus] =
+    await Promise.all([
+      all("announcements"), all("player_goals"), all("equipment"), all("injury_reports"), all("session_reflections"),
+      all("custom_skills"), all("venue_plans"), all("court_allocations"), all("next_session_focus"),
+    ]);
+  return { announcements, goals, equipment, injuries, reflections, customSkills, venuePlan: venuePlans[0] ?? null, courts, nextSessionFocus };
+}
+
 // ───────── Next-session focus ─────────
 
 export const useNextFocus = (campId: string | undefined, personId: string | null | undefined) =>

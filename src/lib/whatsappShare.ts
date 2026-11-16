@@ -1,5 +1,5 @@
 import type { Match, Member, Session, Standing } from "./types";
-import type { WeatherVenuePlan } from "./campExtended";
+import type { VenuePlan } from "./sharedData";
 
 export function formatMatchWhatsAppText(match: Match, members: Member[], campName = "IISc Badminton Camp"): string {
   const memberMap = new Map(members.map((m) => [m.id, m.full_name]));
@@ -36,7 +36,7 @@ export function formatDailyScheduleWhatsAppText({
 }: {
   campName?: string;
   session?: Session | null;
-  weatherPlan?: WeatherVenuePlan | null;
+  weatherPlan?: Pick<VenuePlan, "venue_name" | "weather_summary" | "shuttle_speed" | "athlete_notice"> | null;
   presentCount?: number;
   totalSquad?: number;
 }): string {
@@ -54,7 +54,7 @@ export function formatDailyScheduleWhatsAppText({
   ];
 
   if (weatherPlan) {
-    lines.push(`⚡ *Court Conditions:* ${weatherPlan.weather_summary}`);
+    if (weatherPlan.weather_summary) lines.push(`⚡ *Court Conditions:* ${weatherPlan.weather_summary}`);
     lines.push(`💨 *Shuttle Speed:* ${weatherPlan.shuttle_speed}`);
     if (weatherPlan.athlete_notice) {
       lines.push(`📢 *Notice:* ${weatherPlan.athlete_notice}`);

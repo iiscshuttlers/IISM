@@ -195,6 +195,21 @@ export function SyncEngine({ campId }: { campId: string }) {
       .on("postgres_changes", { event: "*", schema: "public", table: "sessions", filter: `camp_id=eq.${campId}` },
         () => schedule("sessions"))
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance" }, () => schedule("attendance"))
+      // Shared camp features (0004): coaches' notices, courts and plans appear on every phone.
+      .on("postgres_changes", { event: "*", schema: "public", table: "announcements", filter: `camp_id=eq.${campId}` },
+        () => schedule("announcements"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "court_allocations", filter: `camp_id=eq.${campId}` },
+        () => schedule("courts"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "venue_plans", filter: `camp_id=eq.${campId}` },
+        () => schedule("venuePlan"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "next_session_focus", filter: `camp_id=eq.${campId}` },
+        () => schedule("nextFocus"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "injury_reports", filter: `camp_id=eq.${campId}` },
+        () => schedule("injuries"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "equipment", filter: `camp_id=eq.${campId}` },
+        () => schedule("equipment"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "player_goals", filter: `camp_id=eq.${campId}` },
+        () => schedule("goals"))
       .subscribe();
     return () => {
       if (timer.current) clearTimeout(timer.current);

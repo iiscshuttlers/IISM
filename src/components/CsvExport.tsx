@@ -3,7 +3,7 @@ import { Download, FileJson, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import { useMembers, useMatches, useStandings, useSessions, useDrills, useAttendance } from "../lib/api";
 import { downloadCsv } from "../lib/exportCsv";
-import { exportFullCampJson } from "../lib/campExtended";
+import { fetchSharedBackup } from "../lib/sharedData";
 import { generateCampIcs, downloadIcsFile } from "../lib/calendarExport";
 import { Button, Card } from "./ui";
 import type { Camp } from "../lib/types";
@@ -187,21 +187,31 @@ export function CsvExportCard({ camp }: { camp: Camp }) {
     }
   };
 
-  const exportFullBackup = () => {
+  const exportFullBackup = async () => {
     try {
       setExporting("json_backup");
       const safeCampName = camp.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      const jsonStr = exportFullCampJson(camp.id, {
-        campName: camp.name,
-        starts_on: camp.starts_on,
-        ends_on: camp.ends_on,
-        standings: standingsQ.data ?? [],
-        matches: matchesQ.data ?? [],
-        members: membersQ.data ?? [],
-        sessions: sessionsQ.data ?? [],
-        drills: drillsQ.data ?? [],
-        attendance: attendanceQ.data ?? [],
-      });
+      const jsonStr = JSON.stringify(
+        {
+          exportDate: new Date().toISOString(),
+          campId: camp.id,
+          version: "2.0",
+          ...(await fetchSharedBackup(camp.id)),
+          meta: {
+            campName: camp.name,
+            starts_on: camp.starts_on,
+            ends_on: camp.ends_on,
+            standings: standingsQ.data ?? [],
+            matches: matchesQ.data ?? [],
+            members: membersQ.data ?? [],
+            sessions: sessionsQ.data ?? [],
+            drills: drillsQ.data ?? [],
+            attendance: attendanceQ.data ?? [],
+          },
+        },
+        null,
+        2,
+      );
 
       const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8;" });
       const url = URL.createObjectURL(blob);

@@ -29,7 +29,9 @@ triggers). The UI only mirrors them.
 
 1. **Create a new Supabase project** at <https://supabase.com/dashboard>. Do not reuse the club
    app's project.
-2. **Run the schema**: open SQL Editor, paste all of `supabase/migrations/0001_camp.sql`, then Run.
+2. **Run the schema**: open SQL Editor and run each file in `supabase/migrations/` in order
+   (`0001_camp.sql`, then `0002…`, `0003…`, `0004…`). When a new migration is added later, run just
+   that file, before deploying the site version that needs it.
 3. **Make yourself site admin**: in SQL Editor run, using the Google email you will sign in with:
    ```sql
    select public.bootstrap_site_admin('you@gmail.com', 'Your Name');

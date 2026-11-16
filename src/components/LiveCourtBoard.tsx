@@ -1,14 +1,21 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Play, Sparkles, Check, X, Swords, Dumbbell } from "lucide-react";
 import { Badge, Button, Card, Sheet } from "./ui";
 import { toast } from "sonner";
-import {
-  getCourtAllocations,
-  saveCourtAllocation,
-  clearCourtAllocation,
-  type CourtAllocation,
-} from "../lib/campExtended";
+import { errorText } from "../lib/supabase";
+import { COURT_NUMBERS, useCourtMutations, useCourts, type CourtAllocation } from "../lib/sharedData";
 import type { Member } from "../lib/types";
+
+/** A court on the board: its allocation, or open when nothing is assigned. */
+interface CourtView {
+  court_num: number;
+  status: CourtAllocation["status"] | "open";
+  title: string;
+  subtitle: string | null;
+  started_at: string | null;
+}
+
+const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 export function LiveCourtBoard({
   campId,
@@ -21,29 +28,25 @@ export function LiveCourtBoard({
   players: Member[];
   onRecordMatchOnCourt?: (courtNum: number) => void;
 }) {
-  const [courts, setCourts] = useState<CourtAllocation[]>([]);
-  const [selectedCourt, setSelectedCourt] = useState<CourtAllocation | null>(null);
+  // Shared by the whole camp: coaches assign courts, everyone sees the board update live.
+  const courtsQ = useCourts(campId);
+  const mut = useCourtMutations(campId);
+  const courts: CourtView[] = COURT_NUMBERS.map(
+    (n) =>
+      courtsQ.data?.find((c) => c.court_num === n) ?? {
+        court_num: n, status: "open", title: `Court ${n} available`, subtitle: null, started_at: null,
+      },
+  );
+  const [selectedCourt, setSelectedCourt] = useState<CourtView | null>(null);
   const [assignOpen, setAssignOpen] = useState(false);
 
   // Form state for updating court
   const [formStatus, setFormStatus] = useState<CourtAllocation["status"]>("match");
   const [formTitle, setFormTitle] = useState("");
   const [formSubtitle, setFormSubtitle] = useState("");
+  const onErr = (e: unknown) => toast.error(errorText(e));
 
-  const refresh = () => {
-    if (campId) {
-      setCourts(getCourtAllocations(campId));
-    }
-  };
-
-  useEffect(() => {
-    refresh();
-    const handleStorageChange = () => refresh();
-    window.addEventListener("iism_extended_change", handleStorageChange);
-    return () => window.removeEventListener("iism_extended_change", handleStorageChange);
-  }, [campId]);
-
-  const handleOpenAssign = (c: CourtAllocation) => {
+  const handleOpenAssign = (c: CourtView) => {
     setSelectedCourt(c);
     setFormStatus(c.status === "open" ? "match" : c.status);
     setFormTitle(c.status === "open" ? "" : c.title);
@@ -54,26 +57,32 @@ export function LiveCourtBoard({
   const handleSaveCourt = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCourt) return;
+    const courtNum = selectedCourt.court_num;
 
-    saveCourtAllocation(campId, {
-      court_num: selectedCourt.court_num,
-      status: formStatus,
-      title: formTitle.trim() || `Court ${selectedCourt.court_num} Active`,
-      subtitle: formSubtitle.trim() || undefined,
-      participants: selectedCourt.participants || [],
-      start_time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      updated_at: new Date().toISOString(),
-    });
-
-    toast.success(`Court ${selectedCourt.court_num} updated!`);
-    setAssignOpen(false);
-    refresh();
+    mut.assign.mutate(
+      {
+        court_num: courtNum,
+        status: formStatus,
+        title: formTitle.trim() || `Court ${courtNum} active`,
+        subtitle: formSubtitle.trim() || null,
+        // Editing a busy court keeps its start time; a newly assigned court starts now.
+        started_at: selectedCourt.status !== "open" && selectedCourt.started_at ? selectedCourt.started_at : new Date().toISOString(),
+      },
+      {
+        onSuccess: () => {
+          toast.success(`Court ${courtNum} updated`);
+          setAssignOpen(false);
+        },
+        onError: onErr,
+      },
+    );
   };
 
   const handleClear = (courtNum: number) => {
-    clearCourtAllocation(campId, courtNum);
-    toast.success(`Court ${courtNum} is now open.`);
-    refresh();
+    mut.free.mutate(courtNum, {
+      onSuccess: () => toast.success(`Court ${courtNum} is now open.`),
+      onError: onErr,
+    });
   };
 
   return (
@@ -134,9 +143,9 @@ export function LiveCourtBoard({
                   {court.subtitle && (
                     <p className="text-[11px] text-ink-soft truncate mt-0.5">{court.subtitle}</p>
                   )}
-                  {court.start_time && !isOpen && (
+                  {court.started_at && !isOpen && (
                     <p className="text-[10px] text-ink-soft font-mono mt-1">
-                      Started: {court.start_time}
+                      Started: {fmtTime(court.started_at)}
                     </p>
                   )}
                 </div>
@@ -160,8 +169,9 @@ export function LiveCourtBoard({
                         <button
                           type="button"
                           onClick={() => handleClear(court.court_num)}
+                          disabled={mut.free.isPending}
                           className="p-1 rounded text-ink-soft hover:text-status-danger-text text-[11px]"
-                          title="Free court"
+                          aria-label={`Free court ${court.court_num}`}
                         >
                           <X size={12} />
                         </button>
@@ -229,6 +239,7 @@ export function LiveCourtBoard({
               <input
                 type="text"
                 required
+                maxLength={120}
                 value={formTitle}
                 onChange={(e) => setFormTitle(e.target.value)}
                 placeholder={
@@ -265,47 +276,33 @@ export function LiveCourtBoard({
               </label>
               <input
                 type="text"
+                maxLength={200}
                 value={formSubtitle}
                 onChange={(e) => setFormSubtitle(e.target.value)}
                 placeholder="e.g. Best of 3 sets, 21 pts"
                 className="w-full text-xs rounded-lg border border-line bg-surface px-3 py-2 text-ink focus:outline-none focus:ring-1 focus:ring-brand"
               />
-              {players && players.length > 0 && (
-                <div className="mt-1.5 flex flex-wrap gap-1 items-center">
-                  <span className="text-[10px] text-ink-soft">Quick add:</span>
-                  {players.slice(0, 8).map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => {
-                        setFormTitle((prev) => (prev ? `${prev} & ${p.full_name}` : p.full_name));
-                      }}
-                      className="text-[10px] px-2 py-0.5 rounded-full border border-line bg-surface-2 hover:border-brand/40 text-ink cursor-pointer"
-                    >
-                      +{p.full_name.split(" ")[0]}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
             <div className="pt-2 space-y-2">
-              <Button type="submit" className="w-full">
+              <Button type="submit" className="w-full" disabled={mut.assign.isPending}>
                 <Check size={14} className="mr-1.5" />
-                <span>Save Court {selectedCourt.court_num}</span>
+                <span>{mut.assign.isPending ? "Saving…" : `Save Court ${selectedCourt.court_num}`}</span>
               </Button>
 
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  handleClear(selectedCourt.court_num);
-                  setAssignOpen(false);
-                }}
-                className="w-full text-status-danger-text hover:bg-status-danger-bg/20"
-              >
-                Clear / Free Court {selectedCourt.court_num}
-              </Button>
+              {selectedCourt.status !== "open" && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    handleClear(selectedCourt.court_num);
+                    setAssignOpen(false);
+                  }}
+                  className="w-full text-status-danger-text hover:bg-status-danger-bg/20"
+                >
+                  Clear / Free Court {selectedCourt.court_num}
+                </Button>
+              )}
             </div>
           </form>
         </Sheet>
