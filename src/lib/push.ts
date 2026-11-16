@@ -149,6 +149,37 @@ export async function turnOffPush(): Promise<void> {
   await sub.unsubscribe().catch(() => false);
 }
 
+/** What "Send a test alert" did (the send_test_push database function, migration 0008). */
+export type TestAlertResult = "queued" | "no_phone" | "not_configured" | "too_soon" | "unavailable";
+
+/** The toast for each result: a title, a hint, and whether it went through. */
+export function testAlertMessage(result: TestAlertResult): { ok: boolean; title: string; hint: string } {
+  switch (result) {
+    case "queued":
+      return { ok: true, title: "Test alert sent", hint: "It should pop up on this phone within a few seconds, even if you close the app." };
+    case "too_soon":
+      return { ok: false, title: "Test alert already on its way", hint: "Wait 30 seconds before sending another." };
+    case "no_phone":
+      return { ok: false, title: "This phone isn't registered yet", hint: "Turn Phone alerts off and on again, then retry." };
+    case "not_configured":
+      return { ok: false, title: "Alerts aren't fully set up on the server", hint: "The camp admin needs to finish the phone alerts setup (see README)." };
+    default:
+      return { ok: false, title: "Test alerts aren't available yet", hint: "The camp admin needs to run the 0008 database update." };
+  }
+}
+
+/** Sends one alert to the signed-in person's phones (at most every 30 seconds). */
+export async function sendTestAlert(): Promise<TestAlertResult> {
+  const { data, error } = await supabase.rpc("send_test_push");
+  if (error) {
+    // The database update that adds the function hasn't been run yet.
+    if (error.code === "PGRST202" || /send_test_push/.test(error.message)) return "unavailable";
+    throw error;
+  }
+  const known: TestAlertResult[] = ["queued", "no_phone", "not_configured", "too_soon"];
+  return known.includes(data as TestAlertResult) ? (data as TestAlertResult) : "unavailable";
+}
+
 /** Current state for the switch: on only if this phone is subscribed and saved for this person. */
 export async function readPushState(personId: string): Promise<PushState> {
   if (Notification.permission === "denied") return "blocked";

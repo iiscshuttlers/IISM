@@ -78,8 +78,9 @@ How it works: database triggers from `0007_push.sql` call the `send-push` Edge F
 and deletes phones the push service reports as gone. Nothing is sent until steps 1 to 6 are
 done, and the switch stays hidden until step 7.
 
-1. **Run the migration**: SQL Editor → run `supabase/migrations/0007_push.sql`. It turns on the
-   `pg_net` and Vault extensions if they aren't on yet.
+1. **Run the migrations**: SQL Editor → run `supabase/migrations/0007_push.sql`, then
+   `0008_push_test.sql` (the "Send a test alert" button). 0007 turns on the `pg_net` and Vault
+   extensions if they aren't on yet.
 2. **Generate the keys** (no install needed; prints the values and the commands below, filled in):
    ```bash
    node scripts/generate-vapid-keys.mjs
@@ -117,7 +118,10 @@ done, and the switch stays hidden until step 7.
    Variables**, add `VITE_VAPID_PUBLIC_KEY` = the public key (the deploy workflow passes it to
    the build). For local testing, put the same line in `.env`. Re-run the deploy workflow.
 8. **Try it**: on a phone, open the site, go to Me and turn on Phone alerts, then allow
-   notifications. From another account, record a match that person played. If no alert arrives:
+   notifications, and tap **Send a test alert** under the switch. It goes to your own phones
+   only (at most every 30 seconds) and should pop up within seconds, even with the app closed.
+   For a real one, record a match that person played from another account (the person who
+   records a match never gets an alert for it). If no alert arrives:
    - SQL Editor: `select status_code, content::text, error_msg, created from net._http_response order by created desc limit 5;`
      A `401` means the Vault secret and `PUSH_WEBHOOK_SECRET` differ. A `500` naming missing
      secrets means step 4 is incomplete. No rows at all means nothing was queued: check that

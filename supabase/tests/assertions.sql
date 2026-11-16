@@ -1208,4 +1208,63 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.announcements WHERE title = 'After') THEN RAISE EXCEPTION 'announcement lost'; END IF;
 END $$;
 
+-- 23. (0008) Test alerts: only to the person who asks, through the function, at most every 30 s.
+-- From 22: the function URL is in Vault but the secret isn't; Chitra (p3) has no phone yet.
+DELETE FROM net.http_request_queue;
+SELECT pg_temp.as_user(:u_p3, 'p3@x.test');
+DO $$ BEGIN
+  IF public.send_test_push() <> 'no_phone' THEN RAISE EXCEPTION 'test alert without a phone should say no_phone'; END IF;
+END $$;
+SELECT pg_temp.add_sub((SELECT v FROM ids WHERE k='pcamp'), (SELECT v FROM ids WHERE k='p3'), 'https://fcm.googleapis.com/fcm/send/p3-phone');
+DO $$ BEGIN
+  IF public.send_test_push() <> 'not_configured' THEN RAISE EXCEPTION 'test alert without the secret should say not_configured'; END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM net.http_request_queue) THEN RAISE EXCEPTION 'test alert queued before setup'; END IF;
+  PERFORM vault.create_secret('test-push-secret', 'push_webhook_secret');
+END $$;
+SELECT pg_temp.as_user(:u_p3, 'p3@x.test');
+DO $$ BEGIN
+  IF public.send_test_push() <> 'queued' THEN RAISE EXCEPTION 'test alert should be queued once set up'; END IF;
+  IF public.send_test_push() <> 'too_soon' THEN RAISE EXCEPTION 'a second test within 30 s should say too_soon'; END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF (SELECT string_agg(pg_temp.who(x), ',') FROM pg_temp.queued() x) IS DISTINCT FROM 'p3' THEN
+    RAISE EXCEPTION 'test alert must go to the asker only, once';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_temp.queued() x
+                  WHERE x->>'title' = 'Test alert' AND x->>'url' = '/me'
+                    AND x->>'camp_id' = (SELECT v FROM ids WHERE k='pcamp')::text) THEN
+    RAISE EXCEPTION 'test alert content wrong';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM net.http_request_queue
+                  WHERE url = 'https://push.test/functions/v1/send-push' AND headers->>'x-push-secret' = 'test-push-secret') THEN
+    RAISE EXCEPTION 'test alert not sent to the function with its secret';
+  END IF;
+  -- After 30 seconds another test goes through.
+  UPDATE public.push_tests SET sent_at = now() - interval '31 seconds';
+  DELETE FROM net.http_request_queue;
+END $$;
+SELECT pg_temp.as_user(:u_p3, 'p3@x.test');
+DO $$ BEGIN
+  IF public.send_test_push() <> 'queued' THEN RAISE EXCEPTION 'a test after 30 s should be queued'; END IF;
+  -- Nobody reads or writes the rate-limit table directly.
+  BEGIN
+    PERFORM 1 FROM public.push_tests;
+    RAISE EXCEPTION 'member read push_tests';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+RESET ROLE;
+SET ROLE anon;
+DO $$ BEGIN
+  PERFORM public.send_test_push();
+  RAISE EXCEPTION 'signed-out caller sent a test alert';
+EXCEPTION WHEN insufficient_privilege THEN NULL;
+END $$;
+RESET ROLE;
+DELETE FROM net.http_request_queue;
+
 SELECT 'ALL TRAINING CAMP ASSERTIONS PASSED' AS result;
