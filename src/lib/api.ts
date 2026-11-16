@@ -331,6 +331,20 @@ export function useAdminMutations(campId: string) {
         })),
       onSuccess: roster,
     }),
+    /** Adds several people one after another; reports each one's outcome, refreshes once. */
+    addPeople: useMutation({
+      mutationFn: async (people: { full_name: string; gender: string; email: string; role: Role }[]) => {
+        const results: { name: string; error: string | null }[] = [];
+        for (const p of people) {
+          const res = await supabase.rpc("add_camp_person", {
+            p_camp: campId, p_full_name: p.full_name, p_gender: p.gender, p_email: p.email, p_role: p.role,
+          });
+          results.push({ name: p.full_name, error: res.error ? res.error.message : null });
+        }
+        return results;
+      },
+      onSettled: roster,
+    }),
     updatePerson: useMutation({
       mutationFn: async (p: { person_id: string; full_name: string; gender: string; email: string }) =>
         must(await supabase.rpc("update_camp_person", {

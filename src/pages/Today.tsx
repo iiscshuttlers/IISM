@@ -35,6 +35,7 @@ import { useVenuePlan } from "../lib/sharedData";
 import { DEFAULT_SESSION } from "../lib/today";
 import { errorText } from "../lib/supabase";
 import { CoachAttention } from "../components/CoachAttention";
+import { AdminSetupChecklist } from "../components/AdminChecklist";
 import { Avatar, Badge, Button, Card, ConfirmDialog, Empty, fmtDate, today } from "../components/ui";
 import { DRILL_TYPES, type Attendance } from "../lib/types";
 
@@ -262,6 +263,8 @@ export default function TodayPage() {
           </div>
         </div>
       )}
+
+      {s.isAdmin && <AdminSetupChecklist camp={s.camp!} />}
 
       {s.isStaff && (
         <CoachAttention

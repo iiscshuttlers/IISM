@@ -8,7 +8,7 @@ import {
 } from "../lib/api";
 import { errorText } from "../lib/supabase";
 import { Check } from "lucide-react";
-import { Badge, Button, Card, Field, Input, PageTitle, Segmented, Select, Sheet, Textarea, cx, fmtDate } from "../components/ui";
+import { Badge, Button, Card, ConfirmDialog, Field, Input, PageTitle, Segmented, Select, Sheet, Textarea, cx, fmtDate } from "../components/ui";
 import { PlayerDetailSheet } from "../components/PlayerDetail";
 import { AssessSheet } from "../components/Assessment";
 import type { SelectionRow } from "../lib/types";
@@ -34,6 +34,7 @@ export default function SelectionPage() {
   const [assessing, setAssessing] = useState<string | null>(null);
   const [inspectingPlayer, setInspectingPlayer] = useState<string | null>(null);
   const [unlocking, setUnlocking] = useState(false);
+  const [confirmLock, setConfirmLock] = useState(false);
   const [unlockReason, setUnlockReason] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("rating");
   /** Per-player note save state, so coaches can see a note was stored. */
@@ -92,6 +93,15 @@ export default function SelectionPage() {
     else mut.setDecision.mutate({ person_id: personId, decision, note }, { onError: onErr });
   };
 
+  const standbyCount = board.filter((r) => r.decision === "standby").length;
+  const requestLock = () => {
+    if (selectedCount !== camp.selection_target) {
+      toast.error(`Select exactly ${camp.selection_target} players before locking (${selectedCount} selected).`);
+      return;
+    }
+    setConfirmLock(true);
+  };
+
   const saveNote = (personId: string, decision: Decision, note: string | null) => {
     setNoteState((s) => ({ ...s, [personId]: "saving" }));
     mut.setDecision.mutate({ person_id: personId, decision, note }, {
@@ -114,12 +124,18 @@ export default function SelectionPage() {
 
   return (
     <div>
+      {/* Only the camp admin locks and unlocks; coaches get an explanation instead of a dead button. */}
       <PageTitle action={
-        locked
-          ? <Button variant="secondary" onClick={() => { setUnlockReason(""); setUnlocking(true); }} disabled={!s.isAdmin}><Unlock size={16} /> Unlock</Button>
-          : <Button onClick={() => mut.lock.mutate(undefined, { onSuccess: () => toast.success("Squad locked"), onError: onErr })}
-              disabled={!s.isAdmin || mut.lock.isPending}><Lock size={16} /> Lock squad</Button>
+        !s.isAdmin ? undefined
+          : locked
+          ? <Button variant="secondary" onClick={() => { setUnlockReason(""); setUnlocking(true); }}><Unlock size={16} /> Unlock</Button>
+          : <Button onClick={requestLock} disabled={mut.lock.isPending}><Lock size={16} /> Lock squad</Button>
       }>Selection</PageTitle>
+      {!s.isAdmin && (
+        <p className="mb-3 text-xs text-ink-soft">
+          {locked ? "The squad is locked. Only the camp admin can unlock it." : "Only the camp admin can lock the squad, once exactly " + camp.selection_target + " players are selected."}
+        </p>
+      )}
 
       <Card className="mb-3 space-y-2 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -238,6 +254,26 @@ export default function SelectionPage() {
         person={board.find((r) => r.id === assessing) ?? null}
         history={assessments.data ?? []}
         onClose={() => setAssessing(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmLock}
+        tone="brand"
+        title="Lock the squad?"
+        message={
+          `${selectedCount} selected (${selectedM} men, ${selectedF} women)` +
+          (standbyCount ? `, ${standbyCount} on standby` : "") +
+          ". Decisions are frozen until you unlock with a reason, which is kept in the audit log. " +
+          (camp.publish_selection
+            ? "Publish squad is on, so players will see the squad straight away."
+            : "Players won't see it until you turn on Publish squad in Settings.")
+        }
+        confirmLabel="Lock squad"
+        onConfirm={() => {
+          setConfirmLock(false);
+          mut.lock.mutate(undefined, { onSuccess: () => toast.success("Squad locked"), onError: onErr });
+        }}
+        onCancel={() => setConfirmLock(false)}
       />
 
       <Sheet open={unlocking} onClose={() => setUnlocking(false)} title="Unlock squad">

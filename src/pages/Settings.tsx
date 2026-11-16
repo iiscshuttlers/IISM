@@ -1,13 +1,28 @@
-import { useState } from "react";
-import { Plus, Pencil, Trash2, History } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Bell, BellOff, History, MessageCircle, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
 import { useAdminMutations, useMatches, useMembers, useRosterAdmin, useSessions, useStandings } from "../lib/api";
 import { errorText } from "../lib/supabase";
-import { Badge, Button, Card, ConfirmDialog, Field, Input, PageTitle, Segmented, Select, Sheet, Toggle } from "../components/ui";
+import { inviteText, parseRosterLines } from "../lib/rosterImport";
+import { Badge, Button, Card, ConfirmDialog, Field, Input, PageTitle, Segmented, Select, Sheet, Textarea, Toggle, cx } from "../components/ui";
 import { CsvExportCard } from "../components/CsvExport";
 import { CampHistoryModal } from "../components/CampHistory";
 import type { RosterAdminRow, Role } from "../lib/types";
+
+type RosterFilter = "all" | "pending" | "no_email" | "staff";
+type PersonValues = { full_name: string; gender: string; email: string; role: Role };
+
+const appUrl = () => window.location.origin + import.meta.env.BASE_URL;
+const openWhatsApp = (text: string) => window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, "_blank");
+
+/** What a role change means, in one sentence, for the confirmation. */
+function roleChangeMessage(name: string, from: Role, to: Role): string {
+  if (to === "admin") return `${name} will be able to change camp settings, edit the roster, and lock or unlock the squad.`;
+  if (from === "admin") return `${name} will lose access to camp settings and the roster.${to === "player" ? " They'll also lose access to selection, assessments and coach notes." : ""}`;
+  if (to === "coach") return `${name} will see selection, assessments, private notes and injury reports for every player.`;
+  return `${name} will lose access to selection, assessments, coach notes and other players' injury reports.`;
+}
 
 export default function SettingsPage() {
   const s = useSession();
@@ -20,8 +35,14 @@ export default function SettingsPage() {
   const members = useMembers(camp.id);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [addingMany, setAddingMany] = useState(false);
   const [editing, setEditing] = useState<RosterAdminRow | null>(null);
+  const [pendingEdit, setPendingEdit] = useState<PersonValues | null>(null);
   const [confirmDeletePerson, setConfirmDeletePerson] = useState<RosterAdminRow | null>(null);
+  const [confirm, setConfirm] = useState<"hide" | "publish" | "close" | null>(null);
+  const [filter, setFilter] = useState<RosterFilter>(() =>
+    new URLSearchParams(window.location.search).get("filter") === "pending" ? "pending" : "all",
+  );
   const [details, setDetails] = useState({
     name: camp.name, starts_on: camp.starts_on ?? "", ends_on: camp.ends_on ?? "", selection_target: camp.selection_target,
   });
@@ -32,18 +53,142 @@ export default function SettingsPage() {
   const rows = roster.data ?? [];
   const players = rows.filter((r) => r.role === "player");
   const staff = rows.filter((r) => r.role !== "player");
+  const pending = rows.filter((r) => r.email && !r.signed_in);
+  const noEmail = rows.filter((r) => !r.email);
   const locked = !!camp.selection_locked_at;
+  const listed = useMemo(() => {
+    const all = [...staff, ...players];
+    if (filter === "pending") return all.filter((r) => r.email && !r.signed_in);
+    if (filter === "no_email") return all.filter((r) => !r.email);
+    if (filter === "staff") return staff;
+    return all;
+  }, [filter, staff, players]);
+
+  const saveEdit = async (v: PersonValues) => {
+    if (!editing) return;
+    try {
+      await mut.updatePerson.mutateAsync({ person_id: editing.person_id, full_name: v.full_name, gender: v.gender, email: v.email });
+      if (v.role !== editing.role) await mut.setRole.mutateAsync({ person_id: editing.person_id, role: v.role });
+      toast.success("Saved");
+      setEditing(null);
+    } catch (e) { onErr(e); }
+  };
+
+  const invite = (r: RosterAdminRow) =>
+    openWhatsApp(inviteText({ campName: camp.name, url: appUrl(), firstName: r.full_name.split(" ")[0], email: r.email }));
+  const inviteAllPending = () =>
+    openWhatsApp(
+      `${inviteText({ campName: camp.name, url: appUrl() })}\n\nNot signed in yet: ${pending.map((r) => r.full_name).join(", ")}`,
+    );
 
   return (
     <div className="space-y-5">
       <PageTitle>Camp settings</PageTitle>
 
+      {/* ── Roster ── */}
+      <Card>
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-bold">Roster · {players.length} players, {staff.length} staff</h2>
+            <p className="mt-0.5 text-xs text-ink-soft">
+              {pending.length > 0 ? `${pending.length} with an email haven't signed in yet.` : "Everyone with an email has signed in."}
+            </p>
+          </div>
+          <div className="flex gap-1.5">
+            <Button size="sm" variant="secondary" onClick={() => setAddingMany(true)}><Users size={14} /> Add many</Button>
+            <Button size="sm" onClick={() => setAdding(true)}><Plus size={14} /> Add person</Button>
+          </div>
+        </div>
+
+        <div className="mb-2 overflow-x-auto">
+          <Segmented<RosterFilter>
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: "all", label: `Everyone (${rows.length})` },
+              { value: "pending", label: `Not signed in (${pending.length})` },
+              { value: "no_email", label: `No email (${noEmail.length})` },
+              { value: "staff", label: `Staff (${staff.length})` },
+            ]}
+          />
+        </div>
+
+        {filter === "pending" && pending.length > 0 && (
+          <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-line bg-surface-2/60 p-2.5">
+            <p className="text-xs text-ink-soft">Send the link and sign-in steps to your camp group, or invite people one by one.</p>
+            <Button size="sm" variant="secondary" onClick={inviteAllPending} className="shrink-0">
+              <MessageCircle size={14} className="text-emerald-600" /> Group invite
+            </Button>
+          </div>
+        )}
+        {filter === "no_email" && noEmail.length > 0 && (
+          <p className="mb-2 text-xs text-ink-soft">These people can't sign in. Coaches record matches and attendance for them, or add an email so they can.</p>
+        )}
+
+        <div className="divide-y divide-line">
+          {listed.length === 0 && <p className="py-4 text-center text-xs text-ink-soft">No one here.</p>}
+          {listed.map((r) => (
+            <div key={r.person_id} className="flex items-center justify-between gap-2 py-2.5">
+              <button className="min-w-0 flex-1 text-left" onClick={() => setEditing(r)}>
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-sm font-semibold text-ink">
+                    {r.full_name} {r.gender && <span className="font-normal text-ink-soft">({r.gender})</span>}
+                  </p>
+                  {r.role !== "player" && <Badge tone="brand">{r.role}</Badge>}
+                </div>
+                <p className="mt-0.5 truncate text-xs text-ink-soft">
+                  {r.email ? (
+                    <>
+                      {r.email} ·{" "}
+                      <span className={r.signed_in ? "text-status-success-text" : "text-status-warn-text"}>
+                        {r.signed_in ? "signed in" : "not signed in yet"}
+                      </span>
+                    </>
+                  ) : "No login email"}
+                </p>
+              </button>
+
+              <div className="flex shrink-0 items-center gap-1">
+                {r.email && !r.signed_in && (
+                  <button
+                    type="button"
+                    onClick={() => invite(r)}
+                    aria-label={`Invite ${r.full_name} on WhatsApp`}
+                    title="Send sign-in steps on WhatsApp"
+                    className="rounded-lg p-2 text-emerald-600 hover:bg-surface-2"
+                  >
+                    <MessageCircle size={16} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => mut.setMuted.mutate({ person_id: r.person_id, muted: !r.activity_muted }, {
+                    onSuccess: () => toast.success(`Activity updates ${r.activity_muted ? "on" : "off"} for ${r.full_name}`),
+                    onError: onErr,
+                  })}
+                  aria-pressed={!r.activity_muted}
+                  aria-label={`Activity updates for ${r.full_name}: ${r.activity_muted ? "off" : "on"}`}
+                  title={r.activity_muted ? "Activity updates off" : "Activity updates on"}
+                  className={cx("rounded-lg p-2 hover:bg-surface-2", r.activity_muted ? "text-ink-soft" : "text-brand")}
+                >
+                  {r.activity_muted ? <BellOff size={16} /> : <Bell size={16} />}
+                </button>
+                <Button size="sm" variant="secondary" className="!min-h-[32px] !px-2 text-xs" onClick={() => setEditing(r)}>
+                  <Pencil size={12} /> Edit
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* ── Visibility ── */}
       <Card>
         <h2 className="mb-1 text-sm font-bold">Who can see this camp</h2>
         <p className="mb-3 text-xs text-ink-soft">The club app never sees any of this. These controls are for people inside the camp.</p>
         <Segmented
           value={camp.visibility}
-          onChange={(v) => update({ visibility: v }, v === "staff" ? "Camp hidden from players" : "Camp visible to players")}
+          onChange={(v) => (v === "staff" ? setConfirm("hide") : update({ visibility: v }, "Camp visible to players"))}
           options={[{ value: "members", label: "Players & coaches" }, { value: "staff", label: "Coaches only" }]}
         />
         <div className="mt-3 divide-y divide-line">
@@ -54,7 +199,7 @@ export default function SettingsPage() {
           <Toggle label="Publish squad to players after lock"
             hint={locked ? "Players see selected and standby names (never coach notes)." : "Takes effect once you lock the squad on the Selection page."}
             checked={camp.publish_selection} disabled={camp.visibility === "staff"}
-            onChange={(v) => update({ publish_selection: v })} />
+            onChange={(v) => (v && locked ? setConfirm("publish") : update({ publish_selection: v }))} />
         </div>
       </Card>
 
@@ -63,9 +208,10 @@ export default function SettingsPage() {
         <Toggle label="Activity on for the whole camp"
           hint="In-site updates when a match is recorded, edited, disputed or resolved. No emails or push."
           checked={camp.activity_enabled} onChange={(v) => update({ activity_enabled: v })} />
-        <p className="mt-2 text-xs text-ink-soft">Turn it off for one person with the switch next to their name below.</p>
+        <p className="mt-2 text-xs text-ink-soft">Turn it off for one person with the bell next to their name in the roster.</p>
       </Card>
 
+      {/* ── Details ── */}
       <Card>
         <h2 className="mb-3 text-sm font-bold">Camp details</h2>
         <form className="space-y-3" onSubmit={(e) => {
@@ -81,78 +227,37 @@ export default function SettingsPage() {
                 onChange={(e) => setDetails({ ...details, selection_target: Number(e.target.value) })} />
             </Field>
           </div>
-          <div className="flex items-center gap-2">
-            <Button type="submit" disabled={mut.updateCamp.isPending}>Save details</Button>
-            <Button type="button" variant="ghost" onClick={() => update({ status: camp.status === "active" ? "closed" : "active" },
-              camp.status === "active" ? "Camp closed: no new matches" : "Camp reopened")}>
-              {camp.status === "active" ? "Close camp" : "Reopen camp"}
-            </Button>
-          </div>
+          <Button type="submit" disabled={mut.updateCamp.isPending}>Save details</Button>
         </form>
       </Card>
 
-      <Card>
-        <div className="mb-2 flex items-center justify-between">
+      {/* ── Status: kept apart from Save so it isn't hit by accident ── */}
+      <Card className={cx(camp.status === "closed" && "border-status-warn-border")}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-bold">Roster · {players.length} players, {staff.length} staff</h2>
-            <p className="text-xs text-ink-soft mt-0.5">
-              Click any person or the <strong>Edit</strong> button to change name, email, gender, role, or remove them.
+            <h2 className="text-sm font-bold">Camp status: {camp.status === "active" ? "running" : "closed"}</h2>
+            <p className="mt-0.5 text-xs text-ink-soft">
+              {camp.status === "active"
+                ? "Close the camp on the last day to stop new matches and freeze the standings for selection."
+                : "No new matches can be recorded. Reopen if you need to add results."}
             </p>
           </div>
-          <Button size="sm" onClick={() => setAdding(true)}><Plus size={14} /> Add person</Button>
-        </div>
-        <div className="divide-y divide-line mt-3">
-          {[...staff, ...players].map((r) => (
-            <div
-              key={r.person_id}
-              className="flex items-center justify-between gap-3 py-2.5 px-2 -mx-2 rounded-lg hover:bg-surface-2/70 transition group"
-            >
-              <button className="min-w-0 flex-1 text-left" onClick={() => setEditing(r)}>
-                <div className="flex items-center gap-2">
-                  <p className="truncate text-sm font-semibold text-ink group-hover:text-brand transition">
-                    {r.full_name} {r.gender && <span className="font-normal text-ink-soft">({r.gender})</span>}
-                  </p>
-                  {r.role !== "player" && <Badge tone="brand">{r.role}</Badge>}
-                </div>
-                <p className="truncate text-xs text-ink-soft mt-0.5">
-                  {r.email ? (r.signed_in ? `${r.email} · signed in` : `${r.email} · not signed in yet`) : "No login email"}
-                </p>
-              </button>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <label className="hidden sm:flex items-center gap-1 text-xs text-ink-soft mr-1" title="Activity updates for this person">
-                  <input
-                    type="checkbox"
-                    checked={!r.activity_muted}
-                    aria-label={`Activity for ${r.full_name}`}
-                    onChange={(e) => mut.setMuted.mutate({ person_id: r.person_id, muted: !e.target.checked }, { onError: onErr })}
-                  />
-                  Updates
-                </label>
-
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-7 px-2 text-xs flex items-center gap-1 font-medium text-ink-soft hover:text-ink"
-                  onClick={() => setEditing(r)}
-                >
-                  <Pencil size={12} />
-                  <span>Edit</span>
-                </Button>
-              </div>
-            </div>
-          ))}
+          {camp.status === "active" ? (
+            <Button variant="secondary" size="sm" className="text-status-danger-text" onClick={() => setConfirm("close")}>Close camp</Button>
+          ) : (
+            <Button variant="secondary" size="sm" onClick={() => update({ status: "active" }, "Camp reopened")}>Reopen camp</Button>
+          )}
         </div>
       </Card>
 
       <Card>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-bold flex items-center gap-1.5">
+            <h2 className="flex items-center gap-1.5 text-sm font-bold">
               <History size={16} className="text-brand" />
               Camp History &amp; Records
             </h2>
-            <p className="text-xs text-ink-soft mt-0.5">
+            <p className="mt-0.5 text-xs text-ink-soft">
               Browse past training sessions, tournament milestones, final standings and archived rosters.
             </p>
           </div>
@@ -171,27 +276,39 @@ export default function SettingsPage() {
           })} />
       </Sheet>
 
+      <Sheet open={addingMany} onClose={() => setAddingMany(false)} title="Add many people">
+        {addingMany && (
+          <BulkAdd
+            existingEmails={rows.map((r) => r.email ?? "")}
+            busy={mut.addPeople.isPending}
+            onAdd={(people) => mut.addPeople.mutate(people, {
+              onSuccess: (results) => {
+                const failed = results.filter((r) => r.error);
+                const added = results.length - failed.length;
+                if (added) toast.success(`Added ${added} ${added === 1 ? "person" : "people"}`);
+                if (failed.length) toast.error(`Couldn't add ${failed.map((f) => `${f.name} (${errorText({ message: f.error })})`).join(", ")}`);
+                if (!failed.length) setAddingMany(false);
+              },
+              onError: onErr,
+            })}
+          />
+        )}
+      </Sheet>
+
       <Sheet open={!!editing} onClose={() => setEditing(null)} title={editing ? `Edit ${editing.full_name}` : ""}>
         {editing && (
           <div className="space-y-5">
             <PersonForm initial={editing} busy={mut.updatePerson.isPending || mut.setRole.isPending} submitLabel="Save changes"
-              onSubmit={async (v) => {
-                try {
-                  await mut.updatePerson.mutateAsync({ person_id: editing.person_id, full_name: v.full_name, gender: v.gender, email: v.email });
-                  if (v.role !== editing.role) await mut.setRole.mutateAsync({ person_id: editing.person_id, role: v.role });
-                  toast.success("Saved");
-                  setEditing(null);
-                } catch (e) { onErr(e); }
-              }} />
+              onSubmit={(v) => (v.role !== editing.role ? setPendingEdit(v) : saveEdit(v))} />
             {editing.person_id !== s.meId && (
-              <div className="pt-4 border-t border-line">
-                <p className="text-xs font-semibold text-status-danger-text mb-1">Danger Zone</p>
-                <p className="text-xs text-ink-soft mb-3">
+              <div className="border-t border-line pt-4">
+                <p className="mb-1 text-xs font-semibold text-status-danger-text">Danger Zone</p>
+                <p className="mb-3 text-xs text-ink-soft">
                   Removing this person removes them from the roster and standings.
                 </p>
                 <Button
                   variant="ghost"
-                  className="w-full text-status-danger-text bg-status-danger-bg border border-status-danger-border hover:opacity-90 flex items-center justify-center gap-1.5"
+                  className="flex w-full items-center justify-center gap-1.5 border border-status-danger-border bg-status-danger-bg text-status-danger-text hover:opacity-90"
                   onClick={() => setConfirmDeletePerson(editing)}
                 >
                   <Trash2 size={14} />
@@ -204,10 +321,46 @@ export default function SettingsPage() {
       </Sheet>
 
       <ConfirmDialog
+        open={!!pendingEdit && !!editing}
+        tone="brand"
+        title={editing && pendingEdit ? `Change ${editing.full_name} from ${editing.role} to ${pendingEdit.role}?` : ""}
+        message={editing && pendingEdit ? roleChangeMessage(editing.full_name, editing.role, pendingEdit.role) : undefined}
+        confirmLabel="Change role"
+        onConfirm={() => { const v = pendingEdit; setPendingEdit(null); if (v) saveEdit(v); }}
+        onCancel={() => setPendingEdit(null)}
+      />
+
+      <ConfirmDialog
+        open={confirm === "hide"}
+        title="Hide the camp from players?"
+        message="Players won't be able to open the camp (they'll see “No camp to show yet”) until you switch back. Coaches and admins keep full access."
+        confirmLabel="Hide from players"
+        onConfirm={() => { setConfirm(null); update({ visibility: "staff" }, "Camp hidden from players"); }}
+        onCancel={() => setConfirm(null)}
+      />
+      <ConfirmDialog
+        open={confirm === "publish"}
+        tone="brand"
+        title="Publish the squad now?"
+        message="The squad is locked, so every player will see the selected and standby names straight away. Coach notes stay private."
+        confirmLabel="Publish squad"
+        onConfirm={() => { setConfirm(null); update({ publish_selection: true }, "Squad published to players"); }}
+        onCancel={() => setConfirm(null)}
+      />
+      <ConfirmDialog
+        open={confirm === "close"}
+        title="Close the camp?"
+        message="No one will be able to record new matches, and standings stop changing. Training logs still work. You can reopen it later."
+        confirmLabel="Close camp"
+        onConfirm={() => { setConfirm(null); update({ status: "closed" }, "Camp closed: no new matches"); }}
+        onCancel={() => setConfirm(null)}
+      />
+
+      <ConfirmDialog
         open={!!confirmDeletePerson}
         title={`Remove ${confirmDeletePerson?.full_name}?`}
-        message="This player will be permanently removed from the camp roster and standings."
-        confirmLabel="Remove player"
+        message="This person will be permanently removed from the camp roster and standings."
+        confirmLabel="Remove"
         cancelLabel="Cancel"
         tone="danger"
         onConfirm={() => {
@@ -237,9 +390,60 @@ export default function SettingsPage() {
   );
 }
 
+/** Paste a list (or a spreadsheet column block), check it, then add everyone valid in one go. */
+function BulkAdd({ existingEmails, busy, onAdd }: {
+  existingEmails: string[];
+  busy: boolean;
+  onAdd: (people: PersonValues[]) => void;
+}) {
+  const [text, setText] = useState("");
+  const parsed = parseRosterLines(text, existingEmails);
+  const ok = parsed.filter((r) => !r.error);
+  const bad = parsed.filter((r) => r.error);
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-ink-soft">
+        One person per line: <span className="font-mono">Name, M/F, email, role</span>. Only the name is needed; role is
+        player unless you write coach or admin. You can paste straight from a spreadsheet.
+      </p>
+      <Textarea
+        rows={7}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={"Arjun Rao, M, arjun@gmail.com\nChitra Nair, F, chitra@gmail.com\nEshan Iyer, M"}
+        aria-label="People to add"
+        className="font-mono text-xs"
+      />
+      {parsed.length > 0 && (
+        <div className="max-h-56 overflow-y-auto rounded-xl border border-line">
+          {parsed.map((r) => (
+            <div key={r.line} className={cx("flex items-start gap-2 border-b border-line px-3 py-1.5 text-xs last:border-0", r.error && "bg-status-danger-bg/40")}>
+              <span className="w-6 shrink-0 text-ink-soft">{r.line}</span>
+              <span className="min-w-0 flex-1">
+                <span className="font-semibold text-ink">{r.full_name || "—"}</span>
+                <span className="text-ink-soft">
+                  {r.gender && ` · ${r.gender}`}{r.email && ` · ${r.email}`}{r.role !== "player" && ` · ${r.role}`}
+                </span>
+                {r.error && <span className="block font-semibold text-status-danger-text">{r.error}</span>}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      <Button
+        className="w-full"
+        disabled={busy || ok.length === 0}
+        onClick={() => onAdd(ok.map(({ full_name, gender, email, role }) => ({ full_name, gender, email, role })))}
+      >
+        {busy ? "Adding…" : ok.length ? `Add ${ok.length} ${ok.length === 1 ? "person" : "people"}${bad.length ? ` (skip ${bad.length})` : ""}` : "Add people"}
+      </Button>
+    </div>
+  );
+}
+
 function PersonForm({ initial, onSubmit, busy, submitLabel }: {
   initial?: RosterAdminRow;
-  onSubmit: (v: { full_name: string; gender: string; email: string; role: Role }) => void;
+  onSubmit: (v: PersonValues) => void;
   busy: boolean;
   submitLabel: string;
 }) {
