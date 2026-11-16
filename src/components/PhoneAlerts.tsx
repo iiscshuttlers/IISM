@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { BellRing, Share } from "lucide-react";
+import { BellRing, Send, Share } from "lucide-react";
 import { toast } from "sonner";
-import { currentPushEnv, isIosDevice, pushSupport, readPushState, turnOffPush, turnOnPush, type PushState } from "../lib/push";
-import { Toggle, cx } from "./ui";
+import {
+  currentPushEnv, isIosDevice, pushSupport, readPushState, sendTestAlert, testAlertMessage, turnOffPush, turnOnPush,
+  type PushState,
+} from "../lib/push";
+import { errorText } from "../lib/supabase";
+import { Button, Toggle, cx } from "./ui";
 
 /** "Phone alerts" switch for the Me page. Asks for notification permission only when tapped. */
 export function PhoneAlertsRow({ personId, campId, muted, campActivityOn }: {
@@ -18,6 +22,7 @@ export function PhoneAlertsRow({ personId, campId, muted, campActivityOn }: {
   const ios = isIosDevice(env.userAgent, env.maxTouchPoints);
   const [state, setState] = useState<PushState | "checking">(support === "ok" ? "checking" : "off");
   const [busy, setBusy] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     if (support !== "ok") return;
@@ -45,6 +50,20 @@ export function PhoneAlertsRow({ personId, campId, muted, campActivityOn }: {
       toast.error("Couldn't turn on phone alerts", { description: (e as Error).message });
     } finally {
       setBusy(false);
+    }
+  };
+
+  // One alert to this person's phones, through the same path real alerts take.
+  const sendTest = async () => {
+    setTesting(true);
+    try {
+      const m = testAlertMessage(await sendTestAlert());
+      if (m.ok) toast.success(m.title, { description: m.hint });
+      else toast.warning(m.title, { description: m.hint });
+    } catch (e) {
+      toast.error("Couldn't send a test alert", { description: errorText(e) });
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -83,6 +102,13 @@ export function PhoneAlertsRow({ personId, campId, muted, campActivityOn }: {
           </p>
         )}
         {note && <p className={cx("pb-2 text-[11px]", warn ? "text-status-warn-text" : "text-ink-soft")}>{note}</p>}
+        {state === "on" && (
+          <div className="pb-2.5">
+            <Button size="sm" variant="secondary" onClick={sendTest} disabled={testing}>
+              <Send size={14} className="text-brand" /> {testing ? "Sending…" : "Send a test alert"}
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alertedMatchId, base64UrlToBytes, isIosDevice, pushSupport, sameKey, type PushEnv } from "./push";
+import { alertedMatchId, base64UrlToBytes, isIosDevice, pushSupport, sameKey, testAlertMessage, type PushEnv } from "./push";
 
 const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
 const IPAD = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15";
@@ -70,5 +70,21 @@ describe("base64UrlToBytes / sameKey", () => {
     other[64] ^= 1;
     expect(sameKey(other.buffer, key)).toBe(false);
     expect(sameKey(null, key)).toBe(false);
+  });
+});
+
+describe("testAlertMessage", () => {
+  it("only a queued test counts as sent", () => {
+    expect(testAlertMessage("queued").ok).toBe(true);
+    for (const r of ["too_soon", "no_phone", "not_configured", "unavailable"] as const) {
+      expect(testAlertMessage(r).ok).toBe(false);
+    }
+  });
+
+  it("says what to do for each problem", () => {
+    expect(testAlertMessage("too_soon").hint).toMatch(/30 seconds/);
+    expect(testAlertMessage("no_phone").hint).toMatch(/off and on again/);
+    expect(testAlertMessage("not_configured").hint).toMatch(/setup/);
+    expect(testAlertMessage("unavailable").hint).toMatch(/0008/);
   });
 });
