@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import {
   CheckCheck, CheckCircle2, Circle, Plus, Sparkles, Trash2, Timer,
-  PenTool, Package, BookOpen, Calendar, MessageSquare
+  PenTool, Package, BookOpen, Calendar, MessageSquare, RotateCcw
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
@@ -288,6 +288,26 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
     toast.success("Marked all players present");
   };
 
+  const unmark = (personId: string) => {
+    mut.deleteAttendance.mutate(
+      { session_id: session.id, person_id: personId },
+      {
+        onSuccess: () => {
+          const p = players.find((x) => x.id === personId);
+          toast.success(`${p?.full_name ?? "Player"}: Unmarked`);
+        },
+        onError: onErr,
+      }
+    );
+  };
+
+  const unmarkAll = () => {
+    mut.clearSessionAttendance.mutate(session.id, {
+      onSuccess: () => toast.success("Reset all attendance to unmarked"),
+      onError: onErr,
+    });
+  };
+
   const handleSelectTemplate = (t: DrillTemplate) => {
     mut.addDrill.mutate({
       session_id: session.id,
@@ -426,12 +446,20 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
       <section>
         <div className="mb-1 flex items-center justify-between">
           <h3 className="text-sm font-bold">Attendance & effort</h3>
-          <Button size="sm" variant="secondary" onClick={markAllPresent}>
-            <CheckCheck size={14} className="mr-1 text-brand" />
-            Mark all present
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="secondary" onClick={markAllPresent}>
+              <CheckCheck size={14} className="mr-1 text-brand" />
+              Mark all present
+            </Button>
+            {attendance.length > 0 && (
+              <Button size="sm" variant="ghost" onClick={unmarkAll} className="!text-xs text-ink-soft hover:!text-red-600 cursor-pointer">
+                <RotateCcw size={13} className="mr-1" />
+                Unmark all
+              </Button>
+            )}
+          </div>
         </div>
-        <p className="mb-2 text-xs text-ink-soft">P present · L late · A absent. RPE = how hard it felt (1–10).</p>
+        <p className="mb-2 text-xs text-ink-soft">P present · L late · A absent (tap active status to unmark). RPE = effort (1–10).</p>
         <div className="divide-y divide-line rounded-lg border border-line">
           {players.map((p) => {
             const a = attendance.find((x) => x.person_id === p.id);
@@ -441,11 +469,12 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
                 <div className="flex gap-1">
                   {STATUS.map((st) => (
                     <button key={st.value} aria-label={`${p.full_name} ${st.value}`} aria-pressed={a?.status === st.value}
-                      onClick={() => mark(p.id, { status: st.value })}
-                      className={cx("h-8 w-8 rounded-md text-xs font-bold",
+                      onClick={() => (a?.status === st.value ? unmark(p.id) : mark(p.id, { status: st.value }))}
+                      title={a?.status === st.value ? `Marked ${st.label}. Tap again to unmark.` : `Mark ${st.label}`}
+                      className={cx("h-8 w-8 rounded-md text-xs font-bold transition cursor-pointer active:scale-95",
                         a?.status === st.value
                           ? st.value === "absent" ? "bg-red-600 text-white" : st.value === "late" ? "bg-amber-500 text-white" : "bg-brand text-white"
-                          : "bg-surface-2 text-ink-soft")}>
+                          : "bg-surface-2 text-ink-soft hover:bg-surface-3")}>
                       {st.label}
                     </button>
                   ))}

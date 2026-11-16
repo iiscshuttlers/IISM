@@ -4,7 +4,7 @@ import {
   Plus, Flame, Check, LineChart, Radio, Sparkles, Calendar,
   UserCheck, Clock, UserX, Users, Play, Zap, Megaphone,
   Package, HeartPulse, History, BookOpen, TrendingUp, MessageSquare,
-  Search, Share2
+  Search, Share2, RotateCcw
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
@@ -32,7 +32,7 @@ import { LiveCourtBoard } from "../components/LiveCourtBoard";
 import { QuickCommandPalette } from "../components/QuickCommandPalette";
 import { PlayerDetailSheet } from "../components/PlayerDetail";
 import { shareDailyScheduleOnWhatsApp } from "../lib/whatsappShare";
-import { useVenuePlan } from "../lib/sharedData";
+import { getWeatherVenuePlan } from "../lib/campExtended";
 import { Avatar, Badge, Button, Card, Empty, fmtDate, today } from "../components/ui";
 import { DRILL_TYPES } from "../lib/types";
 import { WellnessCheckin } from "../components/WellnessCheckin";
@@ -58,10 +58,9 @@ export default function TodayPage() {
   const todays = (sessions.data ?? []).filter((x) => x.session_date === today());
   const drills = useDrills(todays.map((x) => x.id));
   const attendance = useAttendance(todays.map((x) => x.id));
-  const assessments = useAssessments(campId, s.isStaff);
+  const assessments = useAssessments(campId);
   const trainingMut = useTrainingMutations(campId);
   const matchMut = useMatchMutations(campId);
-  const venuePlan = useVenuePlan(campId);
 
   const matches = useMatches(campId);
   const members = useMembers(campId);
@@ -97,11 +96,28 @@ export default function TodayPage() {
     ? (attendance.data ?? []).find((a) => a.session_id === todaySession.id && a.person_id === s.meId)
     : null;
 
+  const handleUnmarkMyStatus = () => {
+    if (!todaySession || !s.meId) return;
+    trainingMut.deleteAttendance.mutate(
+      { session_id: todaySession.id, person_id: s.meId },
+      {
+        onSuccess: () => toast.success("Check-in cleared (Unmarked)"),
+      }
+    );
+  };
+
   const handleSetMyStatus = (status: "present" | "late" | "absent") => {
     if (!s.meId) return;
+
+    // Tap active status to toggle off / unmark
+    if (myTodayAtt?.status === status) {
+      handleUnmarkMyStatus();
+      return;
+    }
+
     if (!todaySession) {
       // Auto-create session if none exists
-      trainingMut.ensureSession.mutate(
+      trainingMut.addSession.mutate(
         {
           session_date: today(),
           title: "Today's Training & Matches",
@@ -159,7 +175,7 @@ export default function TodayPage() {
   };
 
   const handleStartTodaySession = () => {
-    trainingMut.ensureSession.mutate(
+    trainingMut.addSession.mutate(
       {
         session_date: today(),
         title: "Today's Training & Matches",
@@ -191,7 +207,7 @@ export default function TodayPage() {
     };
 
     if (!todaySession) {
-      trainingMut.ensureSession.mutate(
+      trainingMut.addSession.mutate(
         {
           session_date: today(),
           title: "Today's Training & Matches",
@@ -208,10 +224,32 @@ export default function TodayPage() {
     }
   };
 
+  const handleUnmarkAll = () => {
+    if (!todaySession) return;
+    trainingMut.clearSessionAttendance.mutate(todaySession.id, {
+      onSuccess: () => toast.success("Reset all attendance to unmarked"),
+    });
+  };
+
   const handleTogglePlayerAttendance = (playerId: string) => {
     const cur = attendanceMap[playerId];
+    const pName = playerMembers.find((m) => m.id === playerId)?.full_name ?? "Player";
+
+    // 4th step in cycle: If currently absent/away, unmark and clear attendance record
+    if (cur === "absent") {
+      if (todaySession) {
+        trainingMut.deleteAttendance.mutate(
+          { session_id: todaySession.id, person_id: playerId },
+          {
+            onSuccess: () => toast.success(`${pName}: Attendance cleared (Unmarked)`),
+          }
+        );
+      }
+      return;
+    }
+
     const nextStatus: "present" | "late" | "absent" =
-      !cur ? "present" : cur === "present" ? "late" : cur === "late" ? "absent" : "present";
+      !cur ? "present" : cur === "present" ? "late" : "absent";
 
     const applyStatus = (sessionId: string) => {
       const curAtt = (attendance.data ?? []).find((a) => a.session_id === sessionId && a.person_id === playerId);
@@ -225,7 +263,6 @@ export default function TodayPage() {
         },
         {
           onSuccess: () => {
-            const pName = playerMembers.find((m) => m.id === playerId)?.full_name ?? "Player";
             const label = nextStatus === "present" ? "Present on court" : nextStatus === "late" ? "Marked Late" : "Marked Away";
             toast.success(`${pName}: ${label}`);
           },
@@ -234,7 +271,7 @@ export default function TodayPage() {
     };
 
     if (!todaySession) {
-      trainingMut.ensureSession.mutate(
+      trainingMut.addSession.mutate(
         {
           session_date: today(),
           title: "Today's Training & Matches",
@@ -356,12 +393,15 @@ export default function TodayPage() {
               size="sm"
               variant="secondary"
               onClick={() => {
+                const plan = getWeatherVenuePlan(campId);
                 shareDailyScheduleOnWhatsApp({
                   campName: s.camp?.name ?? "IISc Badminton Camp",
-                  session: todaySession,
-                  weatherPlan: venuePlan.data ?? null,
-                  presentCount,
-                  totalSquad: playerMembers.length,
+                  dateStr: new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" }),
+                  venue: plan.venue,
+                  indoorOrOutdoor: plan.condition,
+                  drillsSummary: (drills.data ?? []).map((d) => d.drill_name),
+                  presentPlayers: playerMembers.filter((p) => attendanceMap[p.id] === "present").map((p) => p.full_name),
+                  coachNotes: plan.contingencyNotes,
                 });
               }}
               className="!text-emerald-700 dark:!text-emerald-400 !border-emerald-600/30 !bg-emerald-500/10 hover:!bg-emerald-500/20 text-xs py-1 h-auto"
@@ -554,18 +594,28 @@ export default function TodayPage() {
               <span>Are you at the hall today?</span>
             </div>
             {myTodayAtt?.status && (
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${myTodayAtt.status === "present"
-                ? "bg-status-success-bg text-status-success-text border border-status-success-border"
-                : myTodayAtt.status === "late"
-                  ? "bg-status-warn-bg text-status-warn-text border border-status-warn-border"
-                  : "bg-status-danger-bg text-status-danger-text border border-status-danger-border"
-                }`}>
-                {myTodayAtt.status === "present" ? "Present on court" : myTodayAtt.status === "late" ? "Arriving late" : "Rest / Unavailable"}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${myTodayAtt.status === "present"
+                  ? "bg-status-success-bg text-status-success-text border border-status-success-border"
+                  : myTodayAtt.status === "late"
+                    ? "bg-status-warn-bg text-status-warn-text border border-status-warn-border"
+                    : "bg-status-danger-bg text-status-danger-text border border-status-danger-border"
+                  }`}>
+                  {myTodayAtt.status === "present" ? "Present on court" : myTodayAtt.status === "late" ? "Arriving late" : "Rest / Unavailable"}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleUnmarkMyStatus}
+                  className="text-xs text-ink-soft hover:text-status-danger-text underline cursor-pointer"
+                  title="Clear my check-in"
+                >
+                  Unmark
+                </button>
+              </div>
             )}
           </div>
           <p className="text-xs text-ink-soft mb-3">
-            Mark your attendance so coaches and the pairing suggester know you are available for court matches.
+            Mark your attendance for court matches, or tap your active status / Unmark to clear it.
           </p>
           <div className="grid grid-cols-3 gap-2">
             <button
@@ -627,9 +677,22 @@ export default function TodayPage() {
                   <Play size={14} /> Start Today's Session
                 </Button>
               ) : (
-                <Button size="sm" variant="secondary" onClick={handleMarkAllPresent}>
-                  <UserCheck size={14} /> Mark All Present
-                </Button>
+                <>
+                  <Button size="sm" variant="secondary" onClick={handleMarkAllPresent}>
+                    <UserCheck size={14} /> Mark All Present
+                  </Button>
+                  {(presentCount > 0 || lateCount > 0 || absentCount > 0) && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleUnmarkAll}
+                      className="!text-xs text-ink-soft hover:!text-status-danger-text cursor-pointer"
+                      title="Reset all players to unmarked"
+                    >
+                      <RotateCcw size={13} /> Unmark All
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -642,16 +705,19 @@ export default function TodayPage() {
                   key={p.id}
                   type="button"
                   onClick={() => handleTogglePlayerAttendance(p.id)}
-                  title={status ? `Current: ${status}. Click to cycle (Present -> Late -> Away)` : "Click to mark Present"}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition cursor-pointer hover:scale-105 active:scale-95 ${
-                    status === "present"
-                      ? "bg-status-success-bg text-status-success-text border-status-success-border font-semibold shadow-2xs"
-                      : status === "late"
+                  title={
+                    status
+                      ? `Current: ${status}. Tap to cycle (${status === "present" ? "Late" : status === "late" ? "Away" : "Unmark"})`
+                      : "Tap to mark Present"
+                  }
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition cursor-pointer hover:scale-105 active:scale-95 ${status === "present"
+                    ? "bg-status-success-bg text-status-success-text border-status-success-border font-semibold shadow-2xs"
+                    : status === "late"
                       ? "bg-status-warn-bg text-status-warn-text border-status-warn-border"
                       : status === "absent"
-                      ? "bg-status-danger-bg/60 text-status-danger-text border-status-danger-border opacity-70 line-through"
-                      : "bg-surface-2 text-ink-soft border-line hover:border-brand/40"
-                  }`}
+                        ? "bg-status-danger-bg/60 text-status-danger-text border-status-danger-border opacity-70 line-through"
+                        : "bg-surface-2 text-ink-soft border-line hover:border-brand/40"
+                    }`}
                 >
                   <Avatar name={p.full_name} size="xs" />
                   <span>{p.full_name}</span>
@@ -663,7 +729,7 @@ export default function TodayPage() {
             })}
           </div>
           <p className="text-[11px] text-ink-soft mt-2 italic">
-            Tip: Tap any player chip to cycle attendance (Present → Late → Away), or tap Mark All Present.
+            Tip: Tap any player chip to cycle (Present → Late → Away → Unmark), or use Mark All / Unmark All.
           </p>
         </Card>
       )}

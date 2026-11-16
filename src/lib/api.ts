@@ -234,6 +234,16 @@ export function useTrainingMutations(campId: string) {
         must(await supabase.from("attendance").upsert(a, { onConflict: "session_id,person_id" })),
       onSuccess: () => inv("attendance"),
     }),
+    deleteAttendance: useMutation({
+      mutationFn: async ({ session_id, person_id }: { session_id: string; person_id: string }) =>
+        must(await supabase.from("attendance").delete().eq("session_id", session_id).eq("person_id", person_id)),
+      onSuccess: () => inv("attendance"),
+    }),
+    clearSessionAttendance: useMutation({
+      mutationFn: async (session_id: string) =>
+        must(await supabase.from("attendance").delete().eq("session_id", session_id)),
+      onSuccess: () => inv("attendance"),
+    }),
   };
 }
 
