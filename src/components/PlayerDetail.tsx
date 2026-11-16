@@ -8,6 +8,7 @@ import { PlayerGoalsSection } from "./PlayerGoals";
 import { PersonalMatchHistoryModal } from "./PersonalMatchHistory";
 import { NextSessionFocusCard } from "./NextSessionFocusCard";
 import { SessionReflectionModal } from "./SessionReflection";
+import { AssessSheet } from "./Assessment";
 import type { Assessment, Attendance, Match, Member, Standing } from "../lib/types";
 
 export function PlayerDetailSheet({
@@ -71,6 +72,7 @@ export function PlayerDetailSheet({
   const [showReport, setShowReport] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showReflectionsModal, setShowReflectionsModal] = useState(false);
+  const [assessing, setAssessing] = useState(false);
 
   const memberMap = useMemo(() => new Map(members.map((m) => [m.id, m.full_name])), [members]);
   const formatName = (id: string | null) => (id ? memberMap.get(id) ?? "Unknown" : "");
@@ -264,7 +266,10 @@ export function PlayerDetailSheet({
           <Card>
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-xs font-bold text-ink-soft uppercase tracking-wider">Coach Evaluations</h4>
-              <Badge tone="brand">Staff only</Badge>
+              <div className="flex items-center gap-2">
+                <Badge tone="brand">Staff only</Badge>
+                <Button size="sm" onClick={() => setAssessing(true)}>Assess</Button>
+              </div>
             </div>
             {myAssessments.length === 0 ? (
               <p className="text-xs text-ink-soft italic">No coach assessment logged yet.</p>
@@ -408,6 +413,15 @@ export function PlayerDetailSheet({
         personId={personId}
         playerName={member.full_name}
       />
+
+      {isStaff && (
+        <AssessSheet
+          campId={campId ?? matches[0]?.camp_id ?? ""}
+          person={assessing ? member : null}
+          history={assessments}
+          onClose={() => setAssessing(false)}
+        />
+      )}
     </Sheet>
   );
 }

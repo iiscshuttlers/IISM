@@ -25,7 +25,10 @@ export default function MatchesPage() {
   const mut = useMatchMutations(campId);
   // Players checked in today are offered first when picking who played.
   const { presentIds } = useTodayAttendance(campId);
-  const [filter, setFilter] = useState<"all" | "mine" | "disputed">("all");
+  // ?filter=disputed (from the coach's "Needs your attention" card) opens on disputed results.
+  const [filter, setFilter] = useState<"all" | "mine" | "disputed">(() =>
+    new URLSearchParams(window.location.search).get("filter") === "disputed" ? "disputed" : "all",
+  );
   const [catFilter, setCatFilter] = useState<string>("ALL");
   const [search, setSearch] = useState("");
   const [recording, setRecording] = useState(false);

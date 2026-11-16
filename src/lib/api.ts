@@ -234,6 +234,12 @@ export function useTrainingMutations(campId: string) {
         must(await supabase.from("attendance").upsert(a, { onConflict: "session_id,person_id" })),
       onSuccess: () => inv("attendance"),
     }),
+    /** Marks many people in one request (e.g. "Mark all present"). */
+    setAttendanceBulk: useMutation({
+      mutationFn: async (rows: Attendance[]) =>
+        must(await supabase.from("attendance").upsert(rows, { onConflict: "session_id,person_id" })),
+      onSuccess: () => inv("attendance"),
+    }),
     deleteAttendance: useMutation({
       mutationFn: async ({ session_id, person_id }: { session_id: string; person_id: string }) =>
         must(await supabase.from("attendance").delete().eq("session_id", session_id).eq("person_id", person_id)),

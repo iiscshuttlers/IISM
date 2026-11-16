@@ -7,11 +7,14 @@ import {
   useAssessments, useAttendance, useDrills, useMatches, useMembers, useSelection, useSessions, useStaffMutations, useStandings,
 } from "../lib/api";
 import { errorText } from "../lib/supabase";
-import { Badge, Button, Card, Field, Input, PageTitle, Segmented, Select, Sheet, Textarea, cx, fmtDate, today } from "../components/ui";
+import { Check } from "lucide-react";
+import { Badge, Button, Card, Field, Input, PageTitle, Segmented, Select, Sheet, Textarea, cx, fmtDate } from "../components/ui";
 import { PlayerDetailSheet } from "../components/PlayerDetail";
+import { AssessSheet } from "../components/Assessment";
 import type { SelectionRow } from "../lib/types";
 
 type Decision = SelectionRow["decision"];
+type SortBy = "rating" | "coach" | "attendance" | "name";
 
 export default function SelectionPage() {
   const s = useSession();
@@ -32,6 +35,9 @@ export default function SelectionPage() {
   const [inspectingPlayer, setInspectingPlayer] = useState<string | null>(null);
   const [unlocking, setUnlocking] = useState(false);
   const [unlockReason, setUnlockReason] = useState("");
+  const [sortBy, setSortBy] = useState<SortBy>("rating");
+  /** Per-player note save state, so coaches can see a note was stored. */
+  const [noteState, setNoteState] = useState<Record<string, "saving" | "saved">>({});
   const locked = !!camp.selection_locked_at;
   const onErr = (e: unknown) => toast.error(errorText(e));
 
@@ -61,16 +67,22 @@ export default function SelectionPage() {
         decision: sel?.decision ?? null,
         note: sel?.note ?? null,
       };
-    }).sort((a, b) => b.rating - a.rating);
+    });
   }, [members.data, standings.data, sessions.data, drills.data, attendance.data, assessments.data, selection.data]);
 
+  const sortValue = (r: (typeof board)[number]): number =>
+    sortBy === "coach" ? (r.avgAssessment ? Number(r.avgAssessment) : -1)
+      : sortBy === "attendance" ? r.attendancePct ?? -1
+      : r.rating;
   const rows = board
     .filter((r) => gender === "all" || r.gender === gender)
     .filter((r) => {
       if (statusFilter === "all") return true;
       if (statusFilter === "undecided") return !r.decision;
       return r.decision === statusFilter;
-    });
+    })
+    .sort((a, b) => (sortBy === "name" ? a.full_name.localeCompare(b.full_name) : sortValue(b) - sortValue(a) || b.rating - a.rating));
+  const undecidedCount = board.filter((r) => !r.decision).length;
   const selectedCount = board.filter((r) => r.decision === "selected").length;
   const selectedM = board.filter((r) => r.decision === "selected" && r.gender === "M").length;
   const selectedF = board.filter((r) => r.decision === "selected" && r.gender === "F").length;
@@ -78,6 +90,26 @@ export default function SelectionPage() {
   const decide = (personId: string, decision: Decision | "", note: string | null) => {
     if (!decision) mut.clearDecision.mutate(personId, { onError: onErr });
     else mut.setDecision.mutate({ person_id: personId, decision, note }, { onError: onErr });
+  };
+
+  const saveNote = (personId: string, decision: Decision, note: string | null) => {
+    setNoteState((s) => ({ ...s, [personId]: "saving" }));
+    mut.setDecision.mutate({ person_id: personId, decision, note }, {
+      onSuccess: () => {
+        setNoteState((s) => ({ ...s, [personId]: "saved" }));
+        window.setTimeout(() => setNoteState((s) => {
+          const { [personId]: _done, ...rest } = s;
+          return rest;
+        }), 2500);
+      },
+      onError: (e) => {
+        setNoteState((s) => {
+          const { [personId]: _failed, ...rest } = s;
+          return rest;
+        });
+        onErr(e);
+      },
+    });
   };
 
   return (
@@ -134,10 +166,23 @@ export default function SelectionPage() {
               { value: "selected", label: `Selected (${selectedCount})` },
               { value: "standby", label: `Standby (${board.filter(b => b.decision === "standby").length})` },
               { value: "not_selected", label: "Not selected" },
-              { value: "undecided", label: "Undecided" },
+              { value: "undecided", label: `Undecided (${undecidedCount})` },
             ]}
           />
         </div>
+      </div>
+      <div className="mb-3 flex items-center gap-2 overflow-x-auto">
+        <span className="shrink-0 text-xs font-semibold text-ink-soft">Sort by</span>
+        <Segmented<SortBy>
+          value={sortBy}
+          onChange={setSortBy}
+          options={[
+            { value: "rating", label: "Rating" },
+            { value: "coach", label: "Coach score" },
+            { value: "attendance", label: "Attendance" },
+            { value: "name", label: "Name" },
+          ]}
+        />
       </div>
 
       <div className="space-y-2">
@@ -175,25 +220,25 @@ export default function SelectionPage() {
                 disabled={locked || !r.decision} defaultValue={r.note ?? ""} key={`${r.id}-${r.note}`} maxLength={500}
                 onBlur={(e) => {
                   const v = e.target.value.trim() || null;
-                  if (r.decision && v !== r.note) decide(r.id, r.decision, v);
+                  if (r.decision && v !== r.note) saveNote(r.id, r.decision, v);
                 }} />
               <Button size="sm" variant="secondary" onClick={() => setAssessing(r.id)}>Assess</Button>
             </div>
+            {noteState[r.id] && (
+              <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-ink-soft" aria-live="polite">
+                {noteState[r.id] === "saving" ? "Saving note…" : <><Check size={12} className="text-status-success-text" /> Note saved</>}
+              </p>
+            )}
           </Card>
         ))}
       </div>
 
-      <Sheet open={!!assessing} onClose={() => setAssessing(null)}
-        title={`Assess ${board.find((r) => r.id === assessing)?.full_name ?? ""}`}>
-        {assessing && (
-          <AssessmentForm
-            history={(assessments.data ?? []).filter((a) => a.person_id === assessing)}
-            busy={mut.addAssessment.isPending}
-            onSubmit={(a) => mut.addAssessment.mutate({ person_id: assessing, ...a }, {
-              onSuccess: () => { toast.success("Assessment saved"); setAssessing(null); }, onError: onErr,
-            })} />
-        )}
-      </Sheet>
+      <AssessSheet
+        campId={camp.id}
+        person={board.find((r) => r.id === assessing) ?? null}
+        history={assessments.data ?? []}
+        onClose={() => setAssessing(null)}
+      />
 
       <Sheet open={unlocking} onClose={() => setUnlocking(false)} title="Unlock squad">
         <div className="space-y-3">
@@ -217,53 +262,6 @@ export default function SelectionPage() {
         assessments={assessments.data ?? []}
         isStaff={true}
       />
-    </div>
-  );
-}
-
-const AREAS = ["technique", "fitness", "tactics", "attitude"] as const;
-
-function AssessmentForm({ history, busy, onSubmit }: {
-  history: { id: string; assessed_on: string; technique: number | null; fitness: number | null; tactics: number | null; attitude: number | null; note: string | null }[];
-  busy: boolean;
-  onSubmit: (a: { assessed_on: string; technique: number | null; fitness: number | null; tactics: number | null; attitude: number | null; note: string | null }) => void;
-}) {
-  const [v, setV] = useState<Record<(typeof AREAS)[number], string>>({ technique: "", fitness: "", tactics: "", attitude: "" });
-  const [note, setNote] = useState("");
-  const [date, setDate] = useState(today());
-  const n = (x: string) => (x ? Number(x) : null);
-  return (
-    <div className="space-y-4">
-      <p className="text-xs text-ink-soft">Visible to the camp admin and coaches only.</p>
-      <div className="grid grid-cols-2 gap-3">
-        {AREAS.map((k) => (
-          <Field key={k} label={k[0].toUpperCase() + k.slice(1)}>
-            <Select value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })}>
-              <option value="">—</option>
-              {[1, 2, 3, 4, 5].map((x) => <option key={x} value={x}>{x}</option>)}
-            </Select>
-          </Field>
-        ))}
-      </div>
-      <Field label="Date"><Input type="date" value={date} max={today()} onChange={(e) => setDate(e.target.value)} /></Field>
-      <Field label="Note"><Textarea value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} /></Field>
-      <Button className="w-full" disabled={busy || AREAS.every((k) => !v[k])}
-        onClick={() => onSubmit({ assessed_on: date, technique: n(v.technique), fitness: n(v.fitness), tactics: n(v.tactics), attitude: n(v.attitude), note: note.trim() || null })}>
-        Save assessment
-      </Button>
-      {history.length > 0 && (
-        <div>
-          <h3 className="mb-1 text-sm font-bold">Previous</h3>
-          <ul className="space-y-1 text-xs text-ink-soft">
-            {history.map((h) => (
-              <li key={h.id}>
-                {fmtDate(h.assessed_on)}: T{h.technique ?? "–"} F{h.fitness ?? "–"} Ta{h.tactics ?? "–"} A{h.attitude ?? "–"}
-                {h.note && ` · ${h.note}`}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import {
   CheckCheck, CheckCircle2, Circle, Plus, Sparkles, Trash2, Timer,
-  PenTool, Package, BookOpen, Calendar, MessageSquare, RotateCcw
+  PenTool, Package, BookOpen, Calendar, MessageSquare, RotateCcw, Wrench
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
@@ -37,6 +37,7 @@ export default function TrainingPage() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [reflectionOpen, setReflectionOpen] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const open = (sessions.data ?? []).find((x) => x.id === openId) ?? null;
 
   const players = (members.data ?? []).filter((m) => m.role === "player");
@@ -45,60 +46,9 @@ export default function TrainingPage() {
     <div className="space-y-4">
       <PageTitle
         action={
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setSkillsOpen(true)}
-              className="flex items-center gap-1"
-            >
-              <BookOpen size={14} className="text-brand" />
-              <span>Skills</span>
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setCalendarOpen(true)}
-              className="flex items-center gap-1"
-            >
-              <Calendar size={14} className="text-brand" />
-              <span>Calendar</span>
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setReflectionOpen(true)}
-              className="flex items-center gap-1"
-            >
-              <MessageSquare size={14} className="text-brand" />
-              <span>Reflect</span>
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setEquipmentOpen(true)}
-              className="flex items-center gap-1"
-            >
-              <Package size={14} className="text-brand" />
-              <span>Gear</span>
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setTacticsOpen(true)}
-              className="flex items-center gap-1"
-            >
-              <PenTool size={14} className="text-brand" />
-              <span>Tactics</span>
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setTimerOpen(true)}
-              className="flex items-center gap-1"
-            >
-              <Timer size={14} className="text-brand" />
-              <span>Timer</span>
+          <div className="flex items-center gap-1.5">
+            <Button variant="secondary" size="sm" onClick={() => setToolsOpen(true)}>
+              <Wrench size={14} className="text-brand" /> Tools
             </Button>
             <Button size="sm" onClick={() => setAdding(true)}>
               <Plus size={16} /> Session
@@ -160,6 +110,32 @@ export default function TrainingPage() {
             onDeleted={() => setOpenId(null)}
           />
         )}
+      </Sheet>
+
+      <Sheet open={toolsOpen} onClose={() => setToolsOpen(false)} title="Training tools">
+        <div className="divide-y divide-line rounded-xl border border-line">
+          {([
+            { icon: Timer, title: "Drill timer", hint: "Intervals and rest countdown", open: setTimerOpen },
+            { icon: PenTool, title: "Tactics board", hint: "Sketch positions and patterns", open: setTacticsOpen },
+            { icon: BookOpen, title: "Skill & drill library", hint: "Technique cues and practice drills", open: setSkillsOpen },
+            { icon: MessageSquare, title: "Post-practice reflection", hint: "What went well, what to work on", open: setReflectionOpen },
+            { icon: Package, title: "Camp gear", hint: "Shuttles, rackets and training aids", open: setEquipmentOpen },
+            { icon: Calendar, title: "Add sessions to calendar", hint: "Google Calendar or .ics file", open: setCalendarOpen },
+          ] as const).map(({ icon: Icon, title, hint, open: openTool }) => (
+            <button
+              key={title}
+              type="button"
+              onClick={() => { setToolsOpen(false); openTool(true); }}
+              className="flex min-h-[52px] w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-2/60"
+            >
+              <Icon size={17} className="shrink-0 text-brand" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-ink">{title}</span>
+                <span className="block truncate text-[11px] text-ink-soft">{hint}</span>
+              </span>
+            </button>
+          ))}
+        </div>
       </Sheet>
 
       <DrillTimerModal
@@ -255,7 +231,12 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
   const [editing, setEditing] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [completedDrills, setCompletedDrills] = useState<Set<string>>(new Set());
+  const doneKey = `drills.done.${session.id}`;
+  const [completedDrills, setCompletedDrills] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(doneKey) ?? "[]") as string[]); } catch { return new Set(); }
+  });
+  const [clearing, setClearing] = useState<string | null>(null);
+  const [confirmUnmarkAll, setConfirmUnmarkAll] = useState(false);
   const num = (x: string) => (x.trim() ? Number(x) : null);
   const onErr = (e: unknown) => toast.error(errorText(e));
 
@@ -264,6 +245,7 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      try { localStorage.setItem(doneKey, JSON.stringify([...next])); } catch { /* storage unavailable */ }
       return next;
     });
   };
@@ -279,13 +261,20 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
   };
 
   const markAllPresent = () => {
-    for (const p of players) {
-      const cur = attendance.find((a) => a.person_id === p.id);
-      if (cur?.status !== "present") {
-        mark(p.id, { status: "present" });
-      }
+    const rows = players
+      .filter((p) => attendance.find((a) => a.person_id === p.id)?.status !== "present")
+      .map((p) => {
+        const cur = attendance.find((a) => a.person_id === p.id);
+        return { session_id: session.id, person_id: p.id, status: "present" as const, rpe: cur?.rpe ?? null, note: cur?.note ?? null };
+      });
+    if (rows.length === 0) {
+      toast.info("Everyone is already marked present");
+      return;
     }
-    toast.success("Marked all players present");
+    mut.setAttendanceBulk.mutate(rows, {
+      onSuccess: () => toast.success(`Marked ${rows.length} player${rows.length === 1 ? "" : "s"} present`),
+      onError: onErr,
+    });
   };
 
   const unmark = (personId: string) => {
@@ -302,6 +291,7 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
   };
 
   const unmarkAll = () => {
+    setConfirmUnmarkAll(false);
     mut.clearSessionAttendance.mutate(session.id, {
       onSuccess: () => toast.success("Reset all attendance to unmarked"),
       onError: onErr,
@@ -361,7 +351,7 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
             <h3 className="text-sm font-bold">Drills</h3>
             {drills.length > 0 && (
               <span className="text-xs text-ink-soft font-mono">
-                ({completedDrills.size}/{drills.length} completed)
+                ({drills.filter((d) => completedDrills.has(d.id)).length}/{drills.length} done · ticks saved on this phone)
               </span>
             )}
           </div>
@@ -447,19 +437,19 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
         <div className="mb-1 flex items-center justify-between">
           <h3 className="text-sm font-bold">Attendance & effort</h3>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="secondary" onClick={markAllPresent}>
+            <Button size="sm" variant="secondary" onClick={markAllPresent} disabled={mut.setAttendanceBulk.isPending}>
               <CheckCheck size={14} className="mr-1 text-brand" />
               Mark all present
             </Button>
             {attendance.length > 0 && (
-              <Button size="sm" variant="ghost" onClick={unmarkAll} className="!text-xs text-ink-soft hover:!text-red-600 cursor-pointer">
+              <Button size="sm" variant="ghost" onClick={() => setConfirmUnmarkAll(true)} className="!text-xs text-ink-soft hover:!text-red-600 cursor-pointer">
                 <RotateCcw size={13} className="mr-1" />
                 Unmark all
               </Button>
             )}
           </div>
         </div>
-        <p className="mb-2 text-xs text-ink-soft">P present · L late · A absent (tap active status to unmark). RPE = effort (1–10).</p>
+        <p className="mb-2 text-xs text-ink-soft">P present · L late · A away · ✕ clear. RPE = effort (1–10).</p>
         <div className="divide-y divide-line rounded-lg border border-line">
           {players.map((p) => {
             const a = attendance.find((x) => x.person_id === p.id);
@@ -469,8 +459,8 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
                 <div className="flex gap-1">
                   {STATUS.map((st) => (
                     <button key={st.value} aria-label={`${p.full_name} ${st.value}`} aria-pressed={a?.status === st.value}
-                      onClick={() => (a?.status === st.value ? unmark(p.id) : mark(p.id, { status: st.value }))}
-                      title={a?.status === st.value ? `Marked ${st.label}. Tap again to unmark.` : `Mark ${st.label}`}
+                      onClick={() => mark(p.id, { status: st.value })}
+                      title={`Mark ${st.value}`}
                       className={cx("h-8 w-8 rounded-md text-xs font-bold transition cursor-pointer active:scale-95",
                         a?.status === st.value
                           ? st.value === "absent" ? "bg-red-600 text-white" : st.value === "late" ? "bg-amber-500 text-white" : "bg-brand text-white"
@@ -485,12 +475,21 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
                   <option value="">RPE</option>
                   {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
                 </Select>
+                <button
+                  type="button"
+                  disabled={!a}
+                  onClick={() => (a?.rpe != null ? setClearing(p.id) : unmark(p.id))}
+                  aria-label={`Clear ${p.full_name}'s attendance`}
+                  className="h-8 w-7 rounded-md text-xs text-ink-soft hover:text-red-600 disabled:invisible"
+                >
+                  ✕
+                </button>
               </div>
             );
           })}
         </div>
 
-        <div className="mt-3 p-3 bg-surface-2 rounded-lg border border-line flex items-center justify-between gap-3">
+        {canDelete && <div className="mt-3 p-3 bg-surface-2 rounded-lg border border-line flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold text-ink">Ready to evaluate player performance?</p>
             <p className="text-[11px] text-ink-soft">Record technique, fitness, tactics &amp; attitude scores for selection.</p>
@@ -498,13 +497,31 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
           <Link href="/selection">
             <Button size="sm" variant="secondary">Assess squad →</Button>
           </Link>
-        </div>
+        </div>}
       </section>
 
       <DrillTemplatesSheet
         open={showTemplates}
         onClose={() => setShowTemplates(false)}
         onSelect={handleSelectTemplate}
+      />
+
+      <ConfirmDialog
+        open={confirmUnmarkAll}
+        title="Clear attendance for this session?"
+        message={`Removes ${attendance.length} check-in${attendance.length === 1 ? "" : "s"}, including any effort ratings. This can't be undone.`}
+        confirmLabel="Clear attendance"
+        onConfirm={unmarkAll}
+        onCancel={() => setConfirmUnmarkAll(false)}
+      />
+
+      <ConfirmDialog
+        open={!!clearing}
+        title={`Clear ${players.find((x) => x.id === clearing)?.full_name ?? "this player"}'s attendance?`}
+        message={`Their effort rating (${attendance.find((x) => x.person_id === clearing)?.rpe ?? "–"}/10) is removed too.`}
+        confirmLabel="Clear"
+        onConfirm={() => { if (clearing) unmark(clearing); setClearing(null); }}
+        onCancel={() => setClearing(null)}
       />
 
       <ConfirmDialog

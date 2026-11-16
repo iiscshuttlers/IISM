@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  Plus, Flame, Check, LineChart, Radio, Sparkles, Calendar,
+  Plus, LineChart, Radio, Sparkles, Calendar,
   UserCheck, Clock, UserX, Users, Play, Zap, Megaphone,
   Package, HeartPulse, History, BookOpen, TrendingUp, MessageSquare,
   Search, Share2, RotateCcw
@@ -18,7 +18,6 @@ import { PairingHelperModal } from "../components/PairingHelper";
 import { CampHighlightsCard } from "../components/CampHighlights";
 import { LiveCourtScorer } from "../components/LiveCourtScorer";
 import { AnnouncementBanner, AnnouncementManagerModal } from "../components/Announcements";
-import { PlayerGoalsSection } from "../components/PlayerGoals";
 import { EquipmentTrackerModal } from "../components/EquipmentTracker";
 import { InjuryTrackerModal } from "../components/InjuryTracker";
 import { CampHistoryModal } from "../components/CampHistory";
@@ -32,10 +31,14 @@ import { LiveCourtBoard } from "../components/LiveCourtBoard";
 import { QuickCommandPalette } from "../components/QuickCommandPalette";
 import { PlayerDetailSheet } from "../components/PlayerDetail";
 import { shareDailyScheduleOnWhatsApp } from "../lib/whatsappShare";
-import { getWeatherVenuePlan } from "../lib/campExtended";
-import { Avatar, Badge, Button, Card, Empty, fmtDate, today } from "../components/ui";
-import { DRILL_TYPES } from "../lib/types";
-import { WellnessCheckin } from "../components/WellnessCheckin";
+import { useVenuePlan } from "../lib/sharedData";
+import { DEFAULT_SESSION } from "../lib/today";
+import { errorText } from "../lib/supabase";
+import { CoachAttention } from "../components/CoachAttention";
+import { Avatar, Badge, Button, Card, ConfirmDialog, Empty, fmtDate, today } from "../components/ui";
+import { DRILL_TYPES, type Attendance } from "../lib/types";
+
+const STATUS_LABEL: Record<Attendance["status"], string> = { present: "Present", late: "Late", absent: "Away" };
 import { InstallCard } from "../components/AppChrome";
 
 export default function TodayPage() {
@@ -53,24 +56,24 @@ export default function TodayPage() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+  /** Player whose attendance options are open (tap a marked chip). */
+  const [attendanceFor, setAttendanceFor] = useState<string | null>(null);
+  const [confirmUnmarkAll, setConfirmUnmarkAll] = useState(false);
 
   const sessions = useSessions(campId);
   const todays = (sessions.data ?? []).filter((x) => x.session_date === today());
   const drills = useDrills(todays.map((x) => x.id));
   const attendance = useAttendance(todays.map((x) => x.id));
-  const assessments = useAssessments(campId);
+  const assessments = useAssessments(campId, s.isStaff);
   const trainingMut = useTrainingMutations(campId);
   const matchMut = useMatchMutations(campId);
+  const venuePlan = useVenuePlan(campId);
 
   const matches = useMatches(campId);
   const members = useMembers(campId);
   const standings = useStandings(campId);
-  const mine = (standings.data ?? []).find((r) => r.person_id === s.meId);
   const myName = (members.data ?? []).find((m) => m.id === s.meId)?.full_name;
-  const rank = mine ? (standings.data ?? []).findIndex((r) => r.person_id === s.meId) + 1 : null;
   const recent = (matches.data ?? []).slice(0, 5);
-  const isPlayer = s.role === "player";
-  const showRank = s.isStaff || s.camp!.players_see_all_results;
 
   const playerMembers = useMemo(
     () => (members.data ?? []).filter((m) => m.role === "player"),
@@ -82,7 +85,7 @@ export default function TodayPage() {
 
   // Attendance map for today's session
   const attendanceMap = useMemo(() => {
-    const map: Record<string, "present" | "late" | "absent"> = {};
+    const map: Record<string, Attendance["status"]> = {};
     for (const a of attendance.data ?? []) {
       if (!todaySession || a.session_id === todaySession.id) {
         map[a.person_id] = a.status;
@@ -96,196 +99,88 @@ export default function TodayPage() {
     ? (attendance.data ?? []).find((a) => a.session_id === todaySession.id && a.person_id === s.meId)
     : null;
 
-  const handleUnmarkMyStatus = () => {
-    if (!todaySession || !s.meId) return;
-    trainingMut.deleteAttendance.mutate(
-      { session_id: todaySession.id, person_id: s.meId },
-      {
-        onSuccess: () => toast.success("Check-in cleared (Unmarked)"),
-      }
-    );
+  const onErr = (e: unknown) => toast.error(errorText(e));
+  const nameOf = (id: string) => playerMembers.find((m) => m.id === id)?.full_name ?? "Player";
+  const attendanceOf = (sessionId: string, personId: string) =>
+    (attendance.data ?? []).find((a) => a.session_id === sessionId && a.person_id === personId);
+
+  /** Today's session, created first if there isn't one (safe when several phones do it at once). */
+  const sessionIdForToday = async () =>
+    todaySession?.id ?? (await trainingMut.ensureSession.mutateAsync({ session_date: today(), ...DEFAULT_SESSION })).id;
+
+  const setStatusFor = async (personId: string, status: Attendance["status"]) => {
+    const sessionId = await sessionIdForToday();
+    const cur = attendanceOf(sessionId, personId);
+    await trainingMut.setAttendance.mutateAsync({
+      session_id: sessionId, person_id: personId, status, rpe: cur?.rpe ?? null, note: cur?.note ?? null,
+    });
   };
 
-  const handleSetMyStatus = (status: "present" | "late" | "absent") => {
+  const clearFor = async (personId: string) => {
+    if (!todaySession) return;
+    await trainingMut.deleteAttendance.mutateAsync({ session_id: todaySession.id, person_id: personId });
+  };
+
+  const handleSetMyStatus = (status: Attendance["status"]) => {
     if (!s.meId) return;
-
-    // Tap active status to toggle off / unmark
-    if (myTodayAtt?.status === status) {
-      handleUnmarkMyStatus();
-      return;
-    }
-
-    if (!todaySession) {
-      // Auto-create session if none exists
-      trainingMut.addSession.mutate(
-        {
-          session_date: today(),
-          title: "Today's Training & Matches",
-          focus: "Practice & Matchplay",
-          notes: "",
-          duration_min: 120,
-        },
-        {
-          onSuccess: (res) => {
-            trainingMut.setAttendance.mutate({
-              session_id: res.id,
-              person_id: s.meId!,
-              status,
-              rpe: null,
-              note: null,
-            });
-            toast.success(`Check-in recorded: ${status === "present" ? "Present on court" : status === "late" ? "Late" : "Unavailable"}`);
-          },
-        }
-      );
-      return;
-    }
-
-    trainingMut.setAttendance.mutate(
-      {
-        session_id: todaySession.id,
-        person_id: s.meId,
-        status,
-        rpe: myTodayAtt?.rpe ?? null,
-        note: myTodayAtt?.note ?? null,
-      },
-      {
-        onSuccess: () => {
-          const label = status === "present" ? "Present on court" : status === "late" ? "Late" : "Rest / Unavailable";
-          toast.success(`Check-in updated: ${label}`);
-        },
-      }
-    );
-  };
-
-  const handleSetMyRpe = (rpeVal: number) => {
-    if (!todaySession || !s.meId) return;
-    trainingMut.setAttendance.mutate(
-      {
-        session_id: todaySession.id,
-        person_id: s.meId,
-        status: myTodayAtt?.status ?? "present",
-        rpe: rpeVal,
-        note: myTodayAtt?.note ?? null,
-      },
-      {
-        onSuccess: () => toast.success(`Logged effort: RPE ${rpeVal}/10`),
-      }
-    );
+    // Tapping your current status again clears it.
+    const clearing = myTodayAtt?.status === status;
+    (clearing ? clearFor(s.meId) : setStatusFor(s.meId, status))
+      .then(() => toast.success(clearing ? "Check-in cleared" : `Check-in: ${STATUS_LABEL[status]}`))
+      .catch(onErr);
   };
 
   const handleStartTodaySession = () => {
-    trainingMut.addSession.mutate(
-      {
-        session_date: today(),
-        title: "Today's Training & Matches",
-        focus: "Practice & Matchplay",
-        notes: "",
-        duration_min: 120,
-      },
-      {
-        onSuccess: () => toast.success("Started today's session"),
-      }
-    );
+    sessionIdForToday().then(() => toast.success("Started today's session")).catch(onErr);
   };
 
-  const handleMarkAllPresent = () => {
-    const applyAll = (sessionId: string) => {
-      for (const p of playerMembers) {
-        const cur = (attendance.data ?? []).find((a) => a.session_id === sessionId && a.person_id === p.id);
-        if (cur?.status !== "present") {
-          trainingMut.setAttendance.mutate({
-            session_id: sessionId,
-            person_id: p.id,
-            status: "present",
-            rpe: cur?.rpe ?? null,
-            note: cur?.note ?? null,
-          });
-        }
+  /** One request for everyone not yet present; keeps any effort ratings already logged. */
+  const handleMarkAllPresent = async () => {
+    try {
+      const sessionId = await sessionIdForToday();
+      const rows = playerMembers
+        .filter((p) => attendanceOf(sessionId, p.id)?.status !== "present")
+        .map((p) => {
+          const cur = attendanceOf(sessionId, p.id);
+          return { session_id: sessionId, person_id: p.id, status: "present" as const, rpe: cur?.rpe ?? null, note: cur?.note ?? null };
+        });
+      if (rows.length === 0) {
+        toast.info("Everyone is already marked present");
+        return;
       }
-      toast.success("Marked all players present");
-    };
-
-    if (!todaySession) {
-      trainingMut.addSession.mutate(
-        {
-          session_date: today(),
-          title: "Today's Training & Matches",
-          focus: "Practice & Matchplay",
-          notes: "",
-          duration_min: 120,
-        },
-        {
-          onSuccess: (res) => applyAll(res.id),
-        }
-      );
-    } else {
-      applyAll(todaySession.id);
+      await trainingMut.setAttendanceBulk.mutateAsync(rows);
+      toast.success(`Marked ${rows.length} player${rows.length === 1 ? "" : "s"} present`);
+    } catch (e) {
+      onErr(e);
     }
   };
 
   const handleUnmarkAll = () => {
     if (!todaySession) return;
+    setConfirmUnmarkAll(false);
+    setAttendanceFor(null);
     trainingMut.clearSessionAttendance.mutate(todaySession.id, {
-      onSuccess: () => toast.success("Reset all attendance to unmarked"),
+      onSuccess: () => toast.success("Attendance cleared for today"),
+      onError: onErr,
     });
   };
 
-  const handleTogglePlayerAttendance = (playerId: string) => {
-    const cur = attendanceMap[playerId];
-    const pName = playerMembers.find((m) => m.id === playerId)?.full_name ?? "Player";
-
-    // 4th step in cycle: If currently absent/away, unmark and clear attendance record
-    if (cur === "absent") {
-      if (todaySession) {
-        trainingMut.deleteAttendance.mutate(
-          { session_id: todaySession.id, person_id: playerId },
-          {
-            onSuccess: () => toast.success(`${pName}: Attendance cleared (Unmarked)`),
-          }
-        );
-      }
-      return;
-    }
-
-    const nextStatus: "present" | "late" | "absent" =
-      !cur ? "present" : cur === "present" ? "late" : "absent";
-
-    const applyStatus = (sessionId: string) => {
-      const curAtt = (attendance.data ?? []).find((a) => a.session_id === sessionId && a.person_id === playerId);
-      trainingMut.setAttendance.mutate(
-        {
-          session_id: sessionId,
-          person_id: playerId,
-          status: nextStatus,
-          rpe: curAtt?.rpe ?? null,
-          note: curAtt?.note ?? null,
-        },
-        {
-          onSuccess: () => {
-            const label = nextStatus === "present" ? "Present on court" : nextStatus === "late" ? "Marked Late" : "Marked Away";
-            toast.success(`${pName}: ${label}`);
-          },
-        }
-      );
-    };
-
-    if (!todaySession) {
-      trainingMut.addSession.mutate(
-        {
-          session_date: today(),
-          title: "Today's Training & Matches",
-          focus: "Practice & Matchplay",
-          notes: "",
-          duration_min: 120,
-        },
-        {
-          onSuccess: (res) => applyStatus(res.id),
-        }
-      );
+  /** Unmarked player: one tap marks them present. Marked player: open the options instead of cycling. */
+  const handleChipTap = (playerId: string) => {
+    if (!attendanceMap[playerId]) {
+      setAttendanceFor(null);
+      setStatusFor(playerId, "present").then(() => toast.success(`${nameOf(playerId)}: present`)).catch(onErr);
     } else {
-      applyStatus(todaySession.id);
+      setAttendanceFor((cur) => (cur === playerId ? null : playerId));
     }
+  };
+
+  const applyChoice = (playerId: string, choice: Attendance["status"] | "clear") => {
+    setAttendanceFor(null);
+    const run = choice === "clear" ? clearFor(playerId) : setStatusFor(playerId, choice);
+    run
+      .then(() => toast.success(`${nameOf(playerId)}: ${choice === "clear" ? "unmarked" : STATUS_LABEL[choice].toLowerCase()}`))
+      .catch(onErr);
   };
 
   // Roster breakdown
@@ -334,48 +229,6 @@ export default function TodayPage() {
       {/* Weather & Venue-Aware Planning Banner */}
       <WeatherVenueBanner campId={campId} isStaff={s.isStaff} />
 
-      {/* Role-Tailored Hub: Athlete View */}
-      {isPlayer && (
-        <Card className="bg-gradient-to-r from-teal-500/10 via-brand-pale/40 to-surface border-brand/30 p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <Avatar name={myName || "Athlete"} size="md" />
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="font-bold text-base text-ink">Welcome back, {myName || "Athlete"}</h2>
-                  <Badge tone={myTodayAtt?.status === "present" ? "good" : myTodayAtt?.status === "late" ? "warn" : "neutral"}>
-                    {myTodayAtt?.status === "present" ? "On Court" : myTodayAtt?.status === "late" ? "Arriving Late" : "Check-in Pending"}
-                  </Badge>
-                </div>
-                <p className="text-xs text-ink-soft">
-                  {myTodayAtt?.status === "present"
-                    ? "You are checked in for today's session and available for matches."
-                    : "Tap 'Present' below when you reach the badminton hall."}
-                </p>
-              </div>
-            </div>
-            {mine && (
-              <div className="flex items-center gap-3 bg-surface/80 rounded-xl px-3 py-1.5 border border-line self-start sm:self-auto">
-                <div className="text-center">
-                  <p className="text-xs text-ink-soft">Rating</p>
-                  <p className="text-sm font-bold text-brand">{mine.rating}</p>
-                </div>
-                {showRank && rank && (
-                  <div className="text-center border-l border-line pl-3">
-                    <p className="text-xs text-ink-soft">Rank</p>
-                    <p className="text-sm font-bold text-ink">#{rank}</p>
-                  </div>
-                )}
-                <div className="text-center border-l border-line pl-3">
-                  <p className="text-xs text-ink-soft">Form</p>
-                  <p className="text-sm font-bold font-mono text-ink">{mine.form || "—"}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </Card>
-      )}
-
       {/* Role-Tailored Hub: Staff / Admin View */}
       {s.isStaff && (
         <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-surface-2 border border-line">
@@ -393,15 +246,12 @@ export default function TodayPage() {
               size="sm"
               variant="secondary"
               onClick={() => {
-                const plan = getWeatherVenuePlan(campId);
                 shareDailyScheduleOnWhatsApp({
                   campName: s.camp?.name ?? "IISc Badminton Camp",
-                  dateStr: new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" }),
-                  venue: plan.venue,
-                  indoorOrOutdoor: plan.condition,
-                  drillsSummary: (drills.data ?? []).map((d) => d.drill_name),
-                  presentPlayers: playerMembers.filter((p) => attendanceMap[p.id] === "present").map((p) => p.full_name),
-                  coachNotes: plan.contingencyNotes,
+                  session: todaySession,
+                  weatherPlan: venuePlan.data ?? null,
+                  presentCount,
+                  totalSquad: playerMembers.length,
                 });
               }}
               className="!text-emerald-700 dark:!text-emerald-400 !border-emerald-600/30 !bg-emerald-500/10 hover:!bg-emerald-500/20 text-xs py-1 h-auto"
@@ -411,6 +261,19 @@ export default function TodayPage() {
             </Button>
           </div>
         </div>
+      )}
+
+      {s.isStaff && (
+        <CoachAttention
+          campId={campId}
+          players={playerMembers}
+          matches={matches.data ?? []}
+          assessments={assessments.data ?? []}
+          todayAttendance={(attendance.data ?? []).filter((a) => a.session_id === todaySession?.id)}
+          sessionMinutes={todaySession?.duration_min}
+          onOpenPlayer={setSelectedPersonId}
+          onOpenInjuries={() => setInjuryOpen(true)}
+        />
       )}
 
       {/* Next Session Focus (Small, trackable focus from coach or self) */}
@@ -455,7 +318,7 @@ export default function TodayPage() {
           </div>
           <div>
             <p className="font-bold text-sm text-ink group-hover:text-brand transition-colors">Record Match</p>
-            <p className="text-[11px] text-ink-soft">Score presets & slots</p>
+            <p className="text-[11px] text-ink-soft">Tap players, quick scores</p>
           </div>
         </Link>
 
@@ -585,8 +448,8 @@ export default function TodayPage() {
         </Button>
       </div>
 
-      {/* Player / Staff Self-Check-in */}
-      {(isPlayer || (s.isStaff && s.meId)) && (
+      {/* Staff self check-in */}
+      {s.meId && (
         <Card className="border-brand/30 bg-surface">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-1.5 font-bold text-sm text-ink">
@@ -594,28 +457,18 @@ export default function TodayPage() {
               <span>Are you at the hall today?</span>
             </div>
             {myTodayAtt?.status && (
-              <div className="flex items-center gap-2">
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${myTodayAtt.status === "present"
-                  ? "bg-status-success-bg text-status-success-text border border-status-success-border"
-                  : myTodayAtt.status === "late"
-                    ? "bg-status-warn-bg text-status-warn-text border border-status-warn-border"
-                    : "bg-status-danger-bg text-status-danger-text border border-status-danger-border"
-                  }`}>
-                  {myTodayAtt.status === "present" ? "Present on court" : myTodayAtt.status === "late" ? "Arriving late" : "Rest / Unavailable"}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleUnmarkMyStatus}
-                  className="text-xs text-ink-soft hover:text-status-danger-text underline cursor-pointer"
-                  title="Clear my check-in"
-                >
-                  Unmark
-                </button>
-              </div>
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${myTodayAtt.status === "present"
+                ? "bg-status-success-bg text-status-success-text border border-status-success-border"
+                : myTodayAtt.status === "late"
+                  ? "bg-status-warn-bg text-status-warn-text border border-status-warn-border"
+                  : "bg-status-danger-bg text-status-danger-text border border-status-danger-border"
+                }`}>
+                {myTodayAtt.status === "present" ? "Present on court" : myTodayAtt.status === "late" ? "Arriving late" : "Rest / Unavailable"}
+              </span>
             )}
           </div>
           <p className="text-xs text-ink-soft mb-3">
-            Mark your attendance for court matches, or tap your active status / Unmark to clear it.
+            Mark yourself in so the pairing helper knows you're on court. Tap your status again to clear it.
           </p>
           <div className="grid grid-cols-3 gap-2">
             <button
@@ -678,18 +531,12 @@ export default function TodayPage() {
                 </Button>
               ) : (
                 <>
-                  <Button size="sm" variant="secondary" onClick={handleMarkAllPresent}>
+                  <Button size="sm" variant="secondary" onClick={handleMarkAllPresent} disabled={trainingMut.setAttendanceBulk.isPending}>
                     <UserCheck size={14} /> Mark All Present
                   </Button>
-                  {(presentCount > 0 || lateCount > 0 || absentCount > 0) && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={handleUnmarkAll}
-                      className="!text-xs text-ink-soft hover:!text-status-danger-text cursor-pointer"
-                      title="Reset all players to unmarked"
-                    >
-                      <RotateCcw size={13} /> Unmark All
+                  {presentCount + lateCount + absentCount > 0 && (
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmUnmarkAll(true)} className="!text-xs text-ink-soft hover:!text-status-danger-text">
+                      <RotateCcw size={13} /> Unmark all
                     </Button>
                   )}
                 </>
@@ -704,20 +551,18 @@ export default function TodayPage() {
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => handleTogglePlayerAttendance(p.id)}
-                  title={
-                    status
-                      ? `Current: ${status}. Tap to cycle (${status === "present" ? "Late" : status === "late" ? "Away" : "Unmark"})`
-                      : "Tap to mark Present"
-                  }
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition cursor-pointer hover:scale-105 active:scale-95 ${status === "present"
-                    ? "bg-status-success-bg text-status-success-text border-status-success-border font-semibold shadow-2xs"
-                    : status === "late"
+                  onClick={() => handleChipTap(p.id)}
+                  aria-expanded={status ? attendanceFor === p.id : undefined}
+                  title={status ? `${STATUS_LABEL[status]}. Tap for options` : "Tap to mark present"}
+                  className={`inline-flex min-h-[36px] items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition cursor-pointer active:scale-95 ${attendanceFor === p.id ? "ring-2 ring-brand " : ""}${
+                    status === "present"
+                      ? "bg-status-success-bg text-status-success-text border-status-success-border font-semibold shadow-2xs"
+                      : status === "late"
                       ? "bg-status-warn-bg text-status-warn-text border-status-warn-border"
                       : status === "absent"
-                        ? "bg-status-danger-bg/60 text-status-danger-text border-status-danger-border opacity-70 line-through"
-                        : "bg-surface-2 text-ink-soft border-line hover:border-brand/40"
-                    }`}
+                      ? "bg-status-danger-bg/60 text-status-danger-text border-status-danger-border opacity-70 line-through"
+                      : "bg-surface-2 text-ink-soft border-line hover:border-brand/40"
+                  }`}
                 >
                   <Avatar name={p.full_name} size="xs" />
                   <span>{p.full_name}</span>
@@ -728,71 +573,47 @@ export default function TodayPage() {
               );
             })}
           </div>
-          <p className="text-[11px] text-ink-soft mt-2 italic">
-            Tip: Tap any player chip to cycle (Present → Late → Away → Unmark), or use Mark All / Unmark All.
+          {attendanceFor && attendanceMap[attendanceFor] && (() => {
+            const cur = attendanceOf(todaySession?.id ?? "", attendanceFor);
+            return (
+              <div className="mt-3 rounded-xl border border-brand/40 bg-brand-pale/30 p-2.5">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-ink">{nameOf(attendanceFor)}</p>
+                  <button type="button" onClick={() => setAttendanceFor(null)} aria-label="Close options" className="px-1 text-xs text-ink-soft hover:text-ink">✕</button>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {(["present", "late", "absent"] as const).map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => applyChoice(attendanceFor, st)}
+                      aria-pressed={attendanceMap[attendanceFor] === st}
+                      className={`min-h-[40px] rounded-lg border text-xs font-semibold ${attendanceMap[attendanceFor] === st ? "border-brand-border bg-brand-pale text-brand" : "border-line bg-surface text-ink"}`}
+                    >
+                      {STATUS_LABEL[st]}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => applyChoice(attendanceFor, "clear")}
+                    className="min-h-[40px] rounded-lg border border-line bg-surface text-xs font-semibold text-status-danger-text"
+                  >
+                    Clear
+                  </button>
+                </div>
+                {cur?.rpe != null && (
+                  <p className="mt-1.5 text-[11px] text-ink-soft">Clear also removes their effort rating ({cur.rpe}/10).</p>
+                )}
+              </div>
+            );
+          })()}
+          <p className="text-[11px] text-ink-soft mt-2">
+            Tap a player to mark them present. Tap a marked player to change or clear it.
           </p>
-        </Card>
-      )}
-
-      {isPlayer && mine && (
-        <Card className="grid grid-cols-4 gap-2 text-center bg-gradient-to-br from-brand/5 to-surface">
-          <Stat label="Camp rating" value={mine.rating} />
-          <Stat label={showRank ? "Rank" : "Played"} value={showRank ? `#${rank}` : mine.played} />
-          <Stat label="Won" value={mine.won} />
-          <Stat label="Form" value={mine.form || "—"} mono />
-        </Card>
-      )}
-
-      {/* Quick Player Effort Logger */}
-      {isPlayer && todaySession && (
-        <Card className="border-brand/30 bg-surface">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5 font-bold text-sm text-ink">
-              <Flame size={16} className="text-amber-500" />
-              <span>How hard was today's session? (RPE)</span>
-            </div>
-            {myTodayAtt?.rpe && (
-              <span className="text-xs font-bold text-brand bg-brand-pale px-2 py-0.5 rounded-full border border-brand-border">
-                RPE {myTodayAtt.rpe}/10 logged
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-ink-soft mb-3">
-            Tap your perceived exertion level (1 = very light warm-up, 10 = max exhaustion).
-          </p>
-          <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
-            {Array.from({ length: 10 }, (_, i) => i + 1).map((val) => {
-              const selected = myTodayAtt?.rpe === val;
-              return (
-                <button
-                  key={val}
-                  type="button"
-                  onClick={() => handleSetMyRpe(val)}
-                  className={`py-2 rounded-xl font-bold text-xs transition-all flex flex-col items-center justify-center border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 active:scale-95 ${selected
-                    ? "bg-brand-pale text-brand border-brand-border font-black shadow-xs"
-                    : "bg-surface-2 text-ink border-line hover:border-brand-border hover:text-brand"
-                    }`}
-                >
-                  <span>{val}</span>
-                  {selected && <Check size={10} className="mt-0.5" />}
-                </button>
-              );
-            })}
-          </div>
         </Card>
       )}
 
       <InstallCard />
-
-      {isPlayer && s.meId && <WellnessCheckin campId={campId} meId={s.meId} />}
-
-      {isPlayer && s.meId && (
-        <PlayerGoalsSection
-          campId={campId}
-          personId={s.meId}
-          isCoach={s.isStaff}
-        />
-      )}
 
       {s.isStaff && (
         <Link href="/insights">
@@ -947,6 +768,15 @@ export default function TodayPage() {
         members={members.data ?? []}
       />
 
+      <ConfirmDialog
+        open={confirmUnmarkAll}
+        title="Clear today's attendance?"
+        message={`Removes check-ins for ${presentCount + lateCount + absentCount} player${presentCount + lateCount + absentCount === 1 ? "" : "s"}, including any effort ratings they logged. This can't be undone.`}
+        confirmLabel="Clear attendance"
+        onConfirm={handleUnmarkAll}
+        onCancel={() => setConfirmUnmarkAll(false)}
+      />
+
       {/* Quick Command Palette (⌘K) */}
       <QuickCommandPalette
         open={commandOpen}
@@ -970,10 +800,3 @@ export default function TodayPage() {
     </div>
   );
 }
-
-const Stat = ({ label, value, mono }: { label: string; value: string | number; mono?: boolean }) => (
-  <div>
-    <p className={`text-lg font-bold ${mono ? "font-mono tracking-wider" : ""}`}>{value}</p>
-    <p className="text-[11px] text-ink-soft">{label}</p>
-  </div>
-);
