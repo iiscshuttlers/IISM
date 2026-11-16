@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { base64UrlToBytes, isIosDevice, pushSupport, sameKey, type PushEnv } from "./push";
+import { alertedMatchId, base64UrlToBytes, isIosDevice, pushSupport, sameKey, type PushEnv } from "./push";
 
 const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
 const IPAD = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15";
@@ -43,6 +43,20 @@ describe("pushSupport", () => {
     expect(pushSupport(env({ userAgent: IPHONE, standalone: true, pushManager: false }))).toBe("unsupported");
     expect(pushSupport(env({ serviceWorker: false }))).toBe("unsupported");
     expect(pushSupport(env({ notification: false }))).toBe("unsupported");
+  });
+});
+
+describe("alertedMatchId", () => {
+  const id = "3f1c2a7e-9b4d-4e2a-8c1f-0a2b3c4d5e6f";
+  it("reads the match a match alert points at, with or without the leading ?", () => {
+    expect(alertedMatchId(`match=${id}`)).toBe(id);
+    expect(alertedMatchId(`?filter=disputed&match=${id.toUpperCase()}`)).toBe(id);
+  });
+  it("ignores missing or malformed ids", () => {
+    expect(alertedMatchId("")).toBeNull();
+    expect(alertedMatchId("new=1")).toBeNull();
+    expect(alertedMatchId("match=")).toBeNull();
+    expect(alertedMatchId("match=1;drop")).toBeNull();
   });
 });
 

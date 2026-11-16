@@ -191,6 +191,14 @@ export function useKeepPushSubscription(personId: string | null | undefined, cam
   }, [personId, campId]);
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The match a match alert points at (`/matches?match=<id>`), or null. */
+export function alertedMatchId(search: string): string | null {
+  const id = new URLSearchParams(search).get("match")?.trim();
+  return id && UUID.test(id) ? id.toLowerCase() : null;
+}
+
 /** Tapping an alert while the app is open: the service worker asks the app to go there. */
 export function listenForAlertTaps() {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
