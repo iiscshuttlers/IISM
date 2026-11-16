@@ -9,10 +9,12 @@ import { SessionProvider } from "./lib/session";
 import { UpdatePrompt, applyOutdoor, readOutdoor } from "./components/AppChrome";
 import { CACHE_KEY } from "./lib/session";
 import { installHaptics } from "./lib/haptics";
+import { listenForAlertTaps } from "./lib/push";
 import "./index.css";
 
 applyOutdoor(readOutdoor());
 installHaptics();
+listenForAlertTaps();
 
 const queryClient = new QueryClient({
   defaultOptions: {

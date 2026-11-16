@@ -59,6 +59,8 @@ export default defineConfig({
         navigateFallbackDenylist: [/privacy\.html$/],
         cleanupOutdatedCaches: true,
         // Supabase API calls are never cached by the service worker.
+        // Phone alerts: push and notification-tap handlers (public/push-sw.js).
+        importScripts: ["push-sw.js"],
       },
       devOptions: { enabled: false },
     }),

@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { useLocation, useSearch } from "wouter";
 import { Plus, Radio, Search, Sparkles, Trophy, X } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
@@ -8,6 +9,8 @@ import { MatchForm, type Lineup } from "../components/MatchForm";
 import { outbox, useOutbox } from "../lib/outbox";
 import { CloudOff } from "lucide-react";
 import { MatchCard } from "../components/MatchCard";
+import { AlertedMatch } from "../components/AlertedMatch";
+import { alertedMatchId } from "../lib/push";
 import { PairingHelperModal } from "../components/PairingHelper";
 import { LiveCourtScorer } from "../components/LiveCourtScorer";
 import { TournamentGeneratorModal } from "../components/TournamentGenerator";
@@ -42,6 +45,14 @@ export default function MatchesPage() {
   const [deletingMatch, setDeletingMatch] = useState<Match | null>(null);
   const [deletingForever, setDeletingForever] = useState<Match | null>(null);
   const [reason, setReason] = useState("");
+  // ?match=<id> (a phone alert) pins that match above the list. Read reactively: tapping an
+  // alert while already on this page changes only the query.
+  const [, navigate] = useLocation();
+  const alertedId = alertedMatchId(useSearch());
+  const alerted = alertedId ? (matches.data ?? []).find((m) => m.id === alertedId) : undefined;
+  useEffect(() => {
+    if (alertedId) window.scrollTo({ top: 0 });
+  }, [alertedId]);
 
   const handleResolveClick = (m: Match) => {
     if (m.status === "void") {
@@ -97,19 +108,6 @@ export default function MatchesPage() {
     if (cat && slots?.length === 4) setPrefill({ category: cat, slots });
     setRecording(true);
   }, []);
-  // ?match=<id> (from an activity alert): scroll to that match and highlight it briefly.
-  const [highlight, setHighlight] = useState<string | null>(() => new URLSearchParams(window.location.search).get("match"));
-  useEffect(() => {
-    if (!highlight || !matches.data) return;
-    if (!matches.data.some((m) => m.id === highlight)) {
-      toast.info("That match is no longer in the list.");
-      setHighlight(null);
-      return;
-    }
-    const t1 = window.setTimeout(() => document.getElementById(`match-${highlight}`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 50);
-    const t2 = window.setTimeout(() => setHighlight(null), 4000);
-    return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
-  }, [highlight, matches.data]);
 
   const pending = useOutbox(campId);
   const recentLineups = useMemo<Lineup[]>(() => {
@@ -161,6 +159,7 @@ export default function MatchesPage() {
   const memberMap = useMemo(() => new Map(people.map((p) => [p.id, p.full_name.toLowerCase()])), [people]);
 
   const list = (matches.data ?? []).filter((m) => {
+    if (m.id === alerted?.id) return false; // shown pinned above
     if (filter === "mine") {
       if (![m.t1_p1, m.t1_p2, m.t2_p1, m.t2_p2].includes(s.meId ?? "")) return false;
     }
@@ -225,6 +224,16 @@ export default function MatchesPage() {
 
       {!s.camp!.players_see_all_results && !s.isStaff && (
         <p className="mb-3 text-xs text-ink-soft">The camp admin has limited this view to your own matches.</p>
+      )}
+
+      {alertedId && matches.isSuccess && (
+        <AlertedMatch onClose={() => navigate("/matches", { replace: true })}>
+          {alerted && (
+            <MatchCard match={alerted} people={people} meId={s.meId} isStaff={s.isStaff}
+              onEdit={setEditing} onDispute={(x) => { setReason(""); setDisputing(x); }} onResolve={handleResolveClick}
+              onRematch={players.length >= 2 ? rematch : undefined} />
+          )}
+        </AlertedMatch>
       )}
 
       <div className="mb-5 space-y-3">
@@ -312,7 +321,7 @@ export default function MatchesPage() {
                   <div
                     key={m.id}
                     id={`match-${m.id}`}
-                    className={cx("scroll-mt-24 transition-colors duration-700", highlight === m.id && "bg-brand-pale/70")}
+                    className="scroll-mt-24"
                   >
                     <MatchCard flat hideDate match={m} people={people} meId={s.meId} isStaff={s.isStaff}
                       onEdit={setEditing} onDispute={(x) => { setReason(""); setDisputing(x); }} onResolve={handleResolveClick}

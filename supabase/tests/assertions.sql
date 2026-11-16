@@ -941,4 +941,271 @@ BEGIN
   END LOOP;
 END $$;
 
+-- 22. (0007) Phone alerts, on a fresh camp. P1, P2 and P3 play; the coach and admin run it.
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+INSERT INTO ids SELECT 'pcamp', public.create_camp('Push', NULL, NULL, 1);
+SELECT public.add_camp_person((SELECT v FROM ids WHERE k='pcamp'), 'Coach', 'M', 'coach@x.test', 'coach');
+SELECT public.add_camp_person((SELECT v FROM ids WHERE k='pcamp'), 'Arjun', 'M', 'p1@x.test', 'player');
+SELECT public.add_camp_person((SELECT v FROM ids WHERE k='pcamp'), 'Bharat', 'M', 'p2@x.test', 'player');
+SELECT public.add_camp_person((SELECT v FROM ids WHERE k='pcamp'), 'Chitra', 'F', 'p3@x.test', 'player');
+RESET ROLE;
+-- Saves a phone as whoever is signed in (row-level security applies).
+CREATE FUNCTION pg_temp.add_sub(p_camp uuid, p_person uuid, p_endpoint text) RETURNS void LANGUAGE sql AS $$
+  INSERT INTO public.push_subscriptions (camp_id, person_id, endpoint, p256dh, auth)
+  VALUES (p_camp, p_person, p_endpoint,
+          'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4',
+          'BTBZMqHH6r4Tts7J_aSIgg');
+$$;
+-- Alert bodies waiting for pg_net (its worker serves the postgres database, not this one).
+CREATE FUNCTION pg_temp.queued() RETURNS SETOF jsonb LANGUAGE sql AS $$
+  SELECT convert_from(body, 'UTF8')::jsonb FROM net.http_request_queue ORDER BY id;
+$$;
+-- An alert's recipients by test name, e.g. 'admin,p1,p3'.
+CREATE FUNCTION pg_temp.who(p jsonb) RETURNS text LANGUAGE sql AS $$
+  SELECT string_agg(i.k, ',' ORDER BY i.k)
+    FROM jsonb_array_elements_text(p->'recipients') r JOIN ids i ON i.v = r::uuid;
+$$;
+
+-- 22a. Each person manages only their own phones, for a camp they're in.
+SELECT pg_temp.as_user(:u_p1, 'p1@x.test');
+SELECT pg_temp.add_sub((SELECT v FROM ids WHERE k='pcamp'), (SELECT v FROM ids WHERE k='p1'), 'https://fcm.googleapis.com/fcm/send/p1-phone');
+DO $$ DECLARE i int; BEGIN
+  BEGIN
+    PERFORM pg_temp.add_sub((SELECT v FROM ids WHERE k='pcamp'), (SELECT v FROM ids WHERE k='p2'), 'https://fcm.googleapis.com/fcm/send/forged');
+    RAISE EXCEPTION 'player saved a phone for someone else';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN
+    PERFORM pg_temp.add_sub((SELECT v FROM ids WHERE k='ocamp'), (SELECT v FROM ids WHERE k='p1'), 'https://fcm.googleapis.com/fcm/send/p1-other');
+    RAISE EXCEPTION 'player saved a phone for a camp they are not in';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN
+    PERFORM pg_temp.add_sub((SELECT v FROM ids WHERE k='pcamp'), (SELECT v FROM ids WHERE k='p1'), 'http://push.example/p1');
+    RAISE EXCEPTION 'non-https push endpoint accepted';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN
+    INSERT INTO public.push_subscriptions (camp_id, person_id, endpoint, p256dh, auth, created_at)
+    VALUES ((SELECT v FROM ids WHERE k='pcamp'), (SELECT v FROM ids WHERE k='p1'), 'https://fcm.googleapis.com/fcm/send/p1-old',
+            'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4', 'BTBZMqHH6r4Tts7J_aSIgg',
+            now() - interval '1 year');
+    RAISE EXCEPTION 'client set created_at';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  -- Saving the same phone again (new keys) updates it in place.
+  INSERT INTO public.push_subscriptions (camp_id, person_id, endpoint, p256dh, auth)
+  VALUES ((SELECT v FROM ids WHERE k='pcamp'), (SELECT v FROM ids WHERE k='p1'), 'https://fcm.googleapis.com/fcm/send/p1-phone',
+          'BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8', 'AAAAAAAAAAAAAAAAAAAAAA')
+  ON CONFLICT (endpoint) DO UPDATE
+    SET person_id = EXCLUDED.person_id, camp_id = EXCLUDED.camp_id, p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth;
+  IF (SELECT count(*) FROM public.push_subscriptions) <> 1
+     OR (SELECT auth FROM public.push_subscriptions) <> 'AAAAAAAAAAAAAAAAAAAAAA' THEN
+    RAISE EXCEPTION 'resaving a phone did not update it in place';
+  END IF;
+  -- Ten phones at most.
+  FOR i IN 1..9 LOOP
+    PERFORM pg_temp.add_sub((SELECT v FROM ids WHERE k='pcamp'), (SELECT v FROM ids WHERE k='p1'), 'https://fcm.googleapis.com/fcm/send/p1-extra-' || i);
+  END LOOP;
+  BEGIN
+    PERFORM pg_temp.add_sub((SELECT v FROM ids WHERE k='pcamp'), (SELECT v FROM ids WHERE k='p1'), 'https://fcm.googleapis.com/fcm/send/p1-extra-10');
+    RAISE EXCEPTION 'eleventh phone saved';
+  EXCEPTION WHEN raise_exception THEN IF SQLERRM <> 'too_many_devices' THEN RAISE; END IF; END;
+  DELETE FROM public.push_subscriptions WHERE endpoint LIKE '%/p1-extra-%';
+  BEGIN
+    UPDATE public.push_subscriptions SET person_id = (SELECT v FROM ids WHERE k='p2');
+    RAISE EXCEPTION 'player handed a phone to someone else';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT pg_temp.as_user(:u_p2, 'p2@x.test');
+SELECT pg_temp.add_sub((SELECT v FROM ids WHERE k='pcamp'), (SELECT v FROM ids WHERE k='p2'), 'https://updates.push.services.mozilla.com/wpush/v2/p2-phone');
+DO $$ BEGIN
+  IF (SELECT count(*) FROM public.push_subscriptions) <> 1 THEN RAISE EXCEPTION 'player sees another person''s phones'; END IF;
+  UPDATE public.push_subscriptions SET auth = 'BBBBBBBBBBBBBBBBBBBBBB' WHERE endpoint LIKE '%/p1-phone';
+  DELETE FROM public.push_subscriptions WHERE endpoint LIKE '%/p1-phone';
+  -- A shared phone: the next person can't take over the previous person's registration
+  -- (the app subscribes afresh instead, which gives a new endpoint).
+  BEGIN
+    PERFORM pg_temp.add_sub((SELECT v FROM ids WHERE k='pcamp'), (SELECT v FROM ids WHERE k='p2'), 'https://fcm.googleapis.com/fcm/send/p1-phone');
+    RAISE EXCEPTION 'saved over another person''s phone';
+  EXCEPTION WHEN unique_violation THEN NULL; END;
+  BEGIN
+    INSERT INTO public.push_subscriptions (camp_id, person_id, endpoint, p256dh, auth)
+    VALUES ((SELECT v FROM ids WHERE k='pcamp'), (SELECT v FROM ids WHERE k='p2'), 'https://fcm.googleapis.com/fcm/send/p1-phone',
+            'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4', 'BTBZMqHH6r4Tts7J_aSIgg')
+    ON CONFLICT (endpoint) DO UPDATE
+      SET person_id = EXCLUDED.person_id, camp_id = EXCLUDED.camp_id, p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth;
+    RAISE EXCEPTION 'upsert took over another person''s phone';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+SELECT pg_temp.add_sub((SELECT v FROM ids WHERE k='pcamp'), (SELECT v FROM ids WHERE k='coach'), 'https://web.push.apple.com/coach-phone');
+DO $$ BEGIN
+  BEGIN PERFORM public._push_message('camps', '{}'::jsonb, NULL); RAISE EXCEPTION 'member called _push_message';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT pg_temp.as_user(NULL, NULL);
+DO $$ BEGIN
+  BEGIN PERFORM 1 FROM public.push_subscriptions; RAISE EXCEPTION 'anon read push subscriptions';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF (SELECT auth FROM public.push_subscriptions WHERE endpoint LIKE '%/p1-phone') IS DISTINCT FROM 'AAAAAAAAAAAAAAAAAAAAAA'
+     OR (SELECT person_id FROM public.push_subscriptions WHERE endpoint LIKE '%/p1-phone') IS DISTINCT FROM (SELECT v FROM ids WHERE k='p1') THEN
+    RAISE EXCEPTION 'another player changed P1''s phone';
+  END IF;
+  IF (SELECT count(*) FROM public.push_subscriptions) <> 3 THEN RAISE EXCEPTION 'phone count wrong'; END IF;
+END $$;
+
+-- 22b. Nothing is queued until the function URL and secret are in Vault.
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+INSERT INTO ids SELECT 'pm0', public.record_match((SELECT v FROM ids WHERE k='pcamp'), NULL, 'MS',
+  (SELECT v FROM ids WHERE k='p1'), NULL, (SELECT v FROM ids WHERE k='p2'), NULL, NULL, 2::smallint);
+RESET ROLE;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM net.http_request_queue) THEN RAISE EXCEPTION 'alert queued before setup'; END IF;
+  PERFORM vault.create_secret('https://push.test/functions/v1/send-push', 'push_function_url');
+  PERFORM vault.create_secret('test-push-secret', 'push_webhook_secret');
+END $$;
+
+-- 22c. Match alerts: one per player, to the function with its secret, opening the match.
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+INSERT INTO ids SELECT 'pm', public.record_match((SELECT v FROM ids WHERE k='pcamp'), NULL, 'MS',
+  (SELECT v FROM ids WHERE k='p1'), NULL, (SELECT v FROM ids WHERE k='p2'), NULL, ARRAY['21-15', '21-18'], 1::smallint);
+RESET ROLE;
+DO $$ BEGIN
+  IF (SELECT string_agg(pg_temp.who(x), ',' ORDER BY pg_temp.who(x)) FROM pg_temp.queued() x) IS DISTINCT FROM 'p1,p2' THEN
+    RAISE EXCEPTION 'match recorded: expected one alert each for p1 and p2';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_temp.queued() x
+             WHERE x->>'url' <> '/matches?match=' || (SELECT v FROM ids WHERE k='pm') OR x->>'title' <> 'Match recorded'
+                OR x->>'camp_id' <> (SELECT v FROM ids WHERE k='pcamp')::text) THEN
+    RAISE EXCEPTION 'match alert content wrong';
+  END IF;
+  IF (SELECT count(*) FROM net.http_request_queue
+       WHERE url = 'https://push.test/functions/v1/send-push' AND method = 'POST'
+         AND headers->>'x-push-secret' = 'test-push-secret') <> 2 THEN
+    RAISE EXCEPTION 'alert not sent to the function with its secret';
+  END IF;
+  DELETE FROM net.http_request_queue;
+END $$;
+
+-- 22d. A dispute alerts staff who have alerts on (the admin has none: no call for them).
+SELECT pg_temp.as_user(:u_p1, 'p1@x.test');
+SELECT public.dispute_match((SELECT v FROM ids WHERE k='pm'), 'It was 21-19 in the second');
+RESET ROLE;
+DO $$ BEGIN
+  IF (SELECT string_agg(pg_temp.who(x), ',') FROM pg_temp.queued() x) IS DISTINCT FROM 'coach' THEN
+    RAISE EXCEPTION 'dispute alert should reach only the coach';
+  END IF;
+  IF (SELECT x->>'urgency' FROM pg_temp.queued() x) <> 'high' THEN RAISE EXCEPTION 'dispute alert not urgent'; END IF;
+  DELETE FROM net.http_request_queue;
+END $$;
+
+-- 22e. A muted player gets no alert when the coach settles the match.
+SELECT pg_temp.as_user(:u_p2, 'p2@x.test');
+SELECT public.set_activity_muted((SELECT v FROM ids WHERE k='pcamp'), (SELECT v FROM ids WHERE k='p2'), true);
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+SELECT public.resolve_match((SELECT v FROM ids WHERE k='pm'), 'confirmed', ARRAY['21-15', '21-19'], 1::smallint);
+RESET ROLE;
+DO $$ BEGIN
+  IF (SELECT string_agg(pg_temp.who(x), ',') FROM pg_temp.queued() x) IS DISTINCT FROM 'p1' THEN
+    RAISE EXCEPTION 'resolve alert: expected p1 only (p2 is muted)';
+  END IF;
+  IF public._push_message('activity', jsonb_build_object('id', 1, 'camp_id', (SELECT v FROM ids WHERE k='pcamp'),
+       'recipient_id', (SELECT v FROM ids WHERE k='p2'), 'kind', 'match_edited', 'match_id', (SELECT v FROM ids WHERE k='pm'),
+       'message', 'x'), NULL) IS NOT NULL THEN
+    RAISE EXCEPTION 'alert built for a muted person';
+  END IF;
+  DELETE FROM net.http_request_queue;
+END $$;
+
+-- 22f. Announcements reach everyone who can see the camp, except the author and the muted.
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+INSERT INTO public.announcements (camp_id, title, message, priority)
+VALUES ((SELECT v FROM ids WHERE k='pcamp'), 'Bus at 6', 'Meet at the main gate.', 'urgent');
+RESET ROLE;
+DO $$ BEGIN
+  IF (SELECT string_agg(pg_temp.who(x), ',') FROM pg_temp.queued() x) IS DISTINCT FROM 'admin,p1,p3' THEN
+    RAISE EXCEPTION 'announcement alert recipients wrong';
+  END IF;
+  IF (SELECT x->>'title' FROM pg_temp.queued() x) <> 'Urgent: Bus at 6' OR (SELECT x->>'url' FROM pg_temp.queued() x) <> '/' THEN
+    RAISE EXCEPTION 'announcement alert content wrong';
+  END IF;
+  DELETE FROM net.http_request_queue;
+  IF public._push_message('announcements', jsonb_build_object('id', gen_random_uuid(), 'camp_id', (SELECT v FROM ids WHERE k='pcamp'),
+       'title', 'Old', 'message', 'Old news', 'priority', 'normal', 'expires_on', current_date - 1,
+       'created_by', (SELECT v FROM ids WHERE k='coach')), NULL) IS NOT NULL THEN
+    RAISE EXCEPTION 'alert built for an expired announcement';
+  END IF;
+END $$;
+-- Staff-only camp: players get no announcement alerts.
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+UPDATE public.camps SET visibility = 'staff' WHERE id = (SELECT v FROM ids WHERE k='pcamp');
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+INSERT INTO public.announcements (camp_id, title, message) VALUES ((SELECT v FROM ids WHERE k='pcamp'), 'Staff only', 'Selection meeting');
+RESET ROLE;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM net.http_request_queue) THEN RAISE EXCEPTION 'staff-only announcement alerted a player'; END IF;
+  IF pg_temp.who(public._push_message('announcements', jsonb_build_object('id', gen_random_uuid(),
+       'camp_id', (SELECT v FROM ids WHERE k='pcamp'), 'title', 'x', 'message', 'y', 'priority', 'normal',
+       'created_by', (SELECT v FROM ids WHERE k='coach')), NULL)) IS DISTINCT FROM 'admin' THEN
+    RAISE EXCEPTION 'staff-only announcement recipients wrong';
+  END IF;
+END $$;
+-- Camp-wide switch off: no alerts at all.
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+UPDATE public.camps SET visibility = 'members', activity_enabled = false WHERE id = (SELECT v FROM ids WHERE k='pcamp');
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+INSERT INTO public.announcements (camp_id, title, message) VALUES ((SELECT v FROM ids WHERE k='pcamp'), 'Quiet', 'Switch is off');
+RESET ROLE;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM net.http_request_queue) THEN RAISE EXCEPTION 'alert sent while the camp switch is off'; END IF;
+END $$;
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+UPDATE public.camps SET activity_enabled = true WHERE id = (SELECT v FROM ids WHERE k='pcamp');
+
+-- 22g. Squad alert: once, to unmuted players, when it is both locked and published.
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+INSERT INTO public.selection (camp_id, person_id, decision)
+VALUES ((SELECT v FROM ids WHERE k='pcamp'), (SELECT v FROM ids WHERE k='p1'), 'selected');
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+UPDATE public.camps SET publish_selection = true WHERE id = (SELECT v FROM ids WHERE k='pcamp');
+RESET ROLE;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM net.http_request_queue) THEN RAISE EXCEPTION 'squad alert before the squad was locked'; END IF;
+END $$;
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+SELECT public.lock_selection((SELECT v FROM ids WHERE k='pcamp'));
+RESET ROLE;
+DO $$ BEGIN
+  IF (SELECT string_agg(pg_temp.who(x), ',') FROM pg_temp.queued() x) IS DISTINCT FROM 'p1,p3' THEN
+    RAISE EXCEPTION 'squad alert recipients wrong';
+  END IF;
+  IF (SELECT x->>'url' FROM pg_temp.queued() x) <> '/squad' THEN RAISE EXCEPTION 'squad alert should open the squad'; END IF;
+  DELETE FROM net.http_request_queue;
+END $$;
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+UPDATE public.camps SET name = 'Push camp', players_see_all_results = false WHERE id = (SELECT v FROM ids WHERE k='pcamp');
+UPDATE public.camps SET publish_selection = true WHERE id = (SELECT v FROM ids WHERE k='pcamp');
+RESET ROLE;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM net.http_request_queue) THEN RAISE EXCEPTION 'squad alert repeated on an unrelated camp change'; END IF;
+END $$;
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+UPDATE public.camps SET publish_selection = false WHERE id = (SELECT v FROM ids WHERE k='pcamp');
+UPDATE public.camps SET publish_selection = true WHERE id = (SELECT v FROM ids WHERE k='pcamp');
+RESET ROLE;
+DO $$ BEGIN
+  IF (SELECT count(*) FROM net.http_request_queue) <> 1 THEN RAISE EXCEPTION 'republishing the squad should alert again'; END IF;
+  DELETE FROM net.http_request_queue;
+  DELETE FROM vault.secrets WHERE name = 'push_webhook_secret';
+END $$;
+
+-- 22h. Without the secret nothing is queued, and the write itself still succeeds.
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+INSERT INTO public.announcements (camp_id, title, message) VALUES ((SELECT v FROM ids WHERE k='pcamp'), 'After', 'No secret');
+RESET ROLE;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM net.http_request_queue) THEN RAISE EXCEPTION 'alert queued without a secret'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.announcements WHERE title = 'After') THEN RAISE EXCEPTION 'announcement lost'; END IF;
+END $$;
+
 SELECT 'ALL TRAINING CAMP ASSERTIONS PASSED' AS result;

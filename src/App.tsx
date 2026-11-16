@@ -23,6 +23,7 @@ const MePage = lazy(() => import("./pages/Me"));
 import { ConnectionBar, SyncEngine } from "./components/AppChrome";
 import { AppLogo } from "./components/AppLogo";
 import { applyA11yPrefs, getA11yPrefs } from "./lib/campExtended";
+import { useKeepPushSubscription } from "./lib/push";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -74,6 +75,7 @@ function Shell({ children }: { children: ReactNode }) {
   const unread = (activity.data ?? []).filter((a) => !a.read_at).length;
   const members = useMembers(s.camp?.id);
   const myName = (members.data ?? []).find((m) => m.id === s.meId)?.full_name;
+  useKeepPushSubscription(s.meId, s.camp?.id);
 
   useEffect(() => {
     applyA11yPrefs(getA11yPrefs());

@@ -20,6 +20,7 @@ import { AnnouncementManagerModal } from "../components/Announcements";
 import { AccessibilityModal } from "../components/AccessibilityModal";
 import { GuideButton } from "../components/GuideModal";
 import { InstallCard } from "../components/AppChrome";
+import { PhoneAlertsRow } from "../components/PhoneAlerts";
 
 type Sheet = "history" | "reflections" | "injuries" | "skills" | "calendar" | "gear" | "archive" | "announcements" | "display" | null;
 
@@ -115,6 +116,9 @@ export default function MePage() {
         <Card className="divide-y divide-line !p-0">
           <Row icon={<SlidersHorizontal size={17} />} title="Display & accessibility" hint="Text size, outdoor contrast, motion" onClick={() => setOpen("display")} />
           <Row icon={<Bell size={17} />} title="Notifications" hint="Match updates and alerts" href="/activity" />
+          {meId && (
+            <PhoneAlertsRow personId={meId} campId={campId} muted={!!me?.activity_muted} campActivityOn={s.camp!.activity_enabled} />
+          )}
           {s.isAdmin && <Row icon={<Settings size={17} />} title="Camp settings" hint="Roster, visibility and exports" href="/settings" />}
         </Card>
         <InstallCard />
