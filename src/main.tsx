@@ -8,9 +8,11 @@ import App from "./App";
 import { SessionProvider } from "./lib/session";
 import { UpdatePrompt, applyOutdoor, readOutdoor } from "./components/AppChrome";
 import { CACHE_KEY } from "./lib/session";
+import { listenForAlertTaps } from "./lib/push";
 import "./index.css";
 
 applyOutdoor(readOutdoor());
+listenForAlertTaps();
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -3,6 +3,7 @@ import type { Session as AuthSession } from "@supabase/supabase-js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { outbox } from "./outbox";
 import { clearLiveScore } from "./liveScore";
+import { turnOffPush } from "./push";
 import { must, supabase } from "./supabase";
 import { useCamps, useIsSiteAdmin, useRole } from "./api";
 import type { Camp, Role } from "./types";
@@ -81,6 +82,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     isAdmin: role.data === "admin",
     loading: authLoading || (!!userId && (me.isLoading || (hasProfile && (camps.isLoading || siteAdmin.isLoading || (!!camp && role.isLoading))))),
     signOut: async () => {
+      // This phone stops getting the person's alerts (while still signed in, to remove the record).
+      await Promise.race([turnOffPush().catch(() => undefined), new Promise((r) => setTimeout(r, 3000))]);
       await supabase.auth.signOut();
       // Nothing from this account stays on a shared phone.
       outbox.clear();

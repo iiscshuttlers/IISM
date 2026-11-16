@@ -65,6 +65,71 @@ unit tests and builds with `BASE_PATH=/<repo>/`. Deep links work because the bui
    Branding: homepage = site address, privacy policy = site address + `privacy.html`, and add
    `<owner>.github.io` to authorised domains. Then **Audience → Publish app**.
 
+### Phone alerts (optional)
+
+Members can turn on **Me → App → Phone alerts**. Their phone then buzzes, even with the app
+closed, when a match they played is recorded, edited, disputed or settled; when a coach posts
+an announcement; and when the squad is published. The camp-wide activity switch and each
+person's activity mute apply to phone alerts too. On iPhone and iPad the app must be added to
+the Home Screen first (Safari → Share → Add to Home Screen), on iOS 16.4 or later.
+
+How it works: database triggers from `0006_push.sql` call the `send-push` Edge Function through
+`pg_net` after the write commits. The function sends the alert to each of the person's phones
+and deletes phones the push service reports as gone. Nothing is sent until steps 1 to 6 are
+done, and the switch stays hidden until step 7.
+
+1. **Run the migration**: SQL Editor → run `supabase/migrations/0006_push.sql`. It turns on the
+   `pg_net` and Vault extensions if they aren't on yet.
+2. **Generate the keys** (no install needed; prints the values and the commands below, filled in):
+   ```bash
+   node scripts/generate-vapid-keys.mjs
+   ```
+   You get `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `PUSH_WEBHOOK_SECRET`. The public key is
+   safe to publish. Keep the other two out of git and out of chats.
+3. **Link the Supabase CLI** to the project (Project Settings → General → Reference ID):
+   ```bash
+   npx supabase login
+   ```
+   ```bash
+   npx supabase link --project-ref <project-ref>
+   ```
+4. **Set the function's secrets**. `VAPID_SUBJECT` must be a `mailto:` address or an `https://`
+   URL; Apple rejects anything else. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided
+   to the function automatically.
+   ```bash
+   npx supabase secrets set VAPID_PUBLIC_KEY=<public key> VAPID_PRIVATE_KEY=<private key> PUSH_WEBHOOK_SECRET=<secret> VAPID_SUBJECT=mailto:you@example.com
+   ```
+5. **Deploy the function**. `--no-verify-jwt` is required: the database proves itself with the
+   `x-push-secret` header, not a user login.
+   ```bash
+   npx supabase functions deploy send-push --no-verify-jwt
+   ```
+6. **Connect the database to the function** (this is the webhook). In SQL Editor, store the
+   function URL and the same secret in Vault, where the triggers read them:
+   ```sql
+   select vault.create_secret('https://<project-ref>.supabase.co/functions/v1/send-push', 'push_function_url');
+   select vault.create_secret('<PUSH_WEBHOOK_SECRET>', 'push_webhook_secret');
+   ```
+   Don't also add Dashboard → Database → Webhooks for these tables: the triggers already make
+   the call, and a dashboard webhook would send a different payload. To change a value later:
+   `select vault.update_secret(id, '<new value>') from vault.secrets where name = 'push_webhook_secret';`
+7. **Turn on the switch in the site**: repo **Settings → Secrets and variables → Actions →
+   Variables**, add `VITE_VAPID_PUBLIC_KEY` = the public key (the deploy workflow passes it to
+   the build). For local testing, put the same line in `.env`. Re-run the deploy workflow.
+8. **Try it**: on a phone, open the site, go to Me and turn on Phone alerts, then allow
+   notifications. From another account, record a match that person played. If no alert arrives:
+   - SQL Editor: `select status_code, content::text, error_msg, created from net._http_response order by created desc limit 5;`
+     A `401` means the Vault secret and `PUSH_WEBHOOK_SECRET` differ. A `500` naming missing
+     secrets means step 4 is incomplete. No rows at all means nothing was queued: check that
+     the person has Phone alerts on, hasn't muted activity, the camp activity switch is on, and
+     both Vault secrets exist with exactly these names.
+   - Dashboard → Edge Functions → send-push → Logs shows each push service's reply.
+
+If you ever replace the VAPID keys, update both the function secrets (step 4) and
+`VITE_VAPID_PUBLIC_KEY` (step 7). Phones switch to the new key the next time the app opens.
+Signing out turns phone alerts off on that phone, so a shared phone doesn't keep getting the
+previous person's alerts.
+
 ## Development
 
 ```bash
@@ -78,7 +143,8 @@ npm run build    # type-check + production build
 
 The SQL suite runs as the real `anon` and `authenticated` roles against a throwaway Supabase
 Postgres container. It covers forged writes, edit and dispute windows, the visibility and
-results-privacy toggles, activity mutes, the squad-lock contract and the rating maths.
+results-privacy toggles, activity mutes, the squad-lock contract, the rating maths, and who
+gets phone alerts.
 
 ```bash
 docker run -d --name camp-test-pg -e POSTGRES_PASSWORD=postgres public.ecr.aws/supabase/postgres:17.6.1.141
