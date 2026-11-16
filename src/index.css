@@ -1,14 +1,16 @@
 @import "tailwindcss";
 
 @theme {
-  --color-brand: #0f766e;
-  --color-brand-dark: #115e59;
-  --color-brand-light: #14b8a6;
+  --color-brand: var(--brand);
+  --color-brand-dark: var(--brand-strong);
+  --color-brand-light: #2dd4bf;
   --color-brand-pale: var(--brand-pale);
   --color-brand-border: var(--brand-border);
 
+  --color-bg: var(--bg);
   --color-ink: var(--ink);
   --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
@@ -27,68 +29,104 @@
   --color-status-danger-text: var(--status-danger-text);
   --color-status-danger-border: var(--status-danger-border);
 
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  /* Native system fonts: instant, offline, and familiar on every phone. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Soft, layered elevation instead of hard outlines. */
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 2px 8px -2px rgb(15 23 42 / 0.06);
+  --shadow-raised: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.05);
+  --shadow-sheet: 0 -8px 32px -8px rgb(15 23 42 / 0.25);
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-page-in: page-in 220ms var(--ease-out-soft) both;
+  --animate-fade-in: fade-in 180ms ease-out both;
+  --animate-sheet-up: sheet-up 280ms var(--ease-out-soft) both;
+  --animate-pop-in: pop-in 200ms var(--ease-out-soft) both;
+  --animate-shimmer: shimmer 1.4s ease-in-out infinite;
+
+  @keyframes page-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes sheet-up {
+    from { transform: translateY(24px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: scale(0.96) translateY(4px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes shimmer {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+  }
 }
 
 :root {
-  --bg: #f8fafc;
+  /* Calm, slightly warm neutrals; the court-green brand carries the colour. */
+  --bg: #f4f6f5;
   --surface: #ffffff;
-  --surface-2: #f1f5f9;
-  --surface-3: #e2e8f0;
-  --line: #cbd5e1;
-  --ink: #0f172a;
-  --ink-soft: #475569; /* Slate-600: strong contrast against white/slate-50 */
+  --surface-2: #f1f4f3;
+  --surface-3: #e5eae8;
+  --line: #e3e8e6;
+  --ink: #0e1916;
+  --ink-soft: #55625e;
+  --ink-faint: #8a9692;
 
-  /* Pale teal selected states */
-  --brand-pale: #f0fdfa; /* Teal-50 */
-  --brand-border: #99f6e4; /* Teal-200 */
+  --brand: #0f766e;
+  --brand-strong: #0b5f58;
+  --brand-pale: #e8f6f3;
+  --brand-border: #a7ded5;
 
   /* Status: Success (Green: wins, confirmed, present, positive) */
-  --status-success-bg: #ecfdf5; /* Emerald-50 */
-  --status-success-text: #047857; /* Emerald-700 */
-  --status-success-border: #a7f3d0; /* Emerald-200 */
+  --status-success-bg: #eaf7ef;
+  --status-success-text: #157347;
+  --status-success-border: #b4e2c6;
 
   /* Status: Warning (Amber: deuce, disputes, warnings) */
-  --status-warn-bg: #fffbeb; /* Amber-50 */
-  --status-warn-text: #b45309; /* Amber-700 */
-  --status-warn-border: #fde68a; /* Amber-200 */
+  --status-warn-bg: #fdf5e4;
+  --status-warn-text: #9a5b08;
+  --status-warn-border: #f2d8a0;
 
   /* Status: Danger / Error (Red: losses, void, deleted, errors) */
-  --status-danger-bg: #fef2f2; /* Red-50 */
-  --status-danger-text: #b91c1c; /* Red-700 */
-  --status-danger-border: #fecaca; /* Red-200 */
+  --status-danger-bg: #fdeeee;
+  --status-danger-text: #b42318;
+  --status-danger-border: #f5c2be;
 
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #090d16;
-    --surface: #0f172a;
-    --surface-2: #1e293b;
-    --surface-3: #334155;
-    --line: #334155; /* Slate-700: clear visible boundaries in dark mode */
-    --ink: #f8fafc;
-    --ink-soft: #cbd5e1; /* Slate-300: crisp, high-contrast secondary text */
+    --bg: #0b100f;
+    --surface: #131a19;
+    --surface-2: #1a2322;
+    --surface-3: #25302e;
+    --line: #26312f;
+    --ink: #eef3f1;
+    --ink-soft: #a8b5b1;
+    --ink-faint: #74827e;
 
-    /* Pale teal selected states */
-    --brand-pale: rgba(15, 118, 110, 0.25);
-    --brand-border: rgba(45, 212, 191, 0.4);
+    --brand: #2bb3a3;
+    --brand-strong: #5fd0c2;
+    --brand-pale: rgba(43, 179, 163, 0.14);
+    --brand-border: rgba(95, 208, 194, 0.35);
 
-    /* Status: Success (Green) */
-    --status-success-bg: rgba(16, 185, 129, 0.16);
-    --status-success-text: #34d399; /* Emerald-400 */
-    --status-success-border: rgba(52, 211, 153, 0.35);
+    --status-success-bg: rgba(52, 199, 120, 0.14);
+    --status-success-text: #5fd69a;
+    --status-success-border: rgba(95, 214, 154, 0.32);
 
-    /* Status: Warning (Amber) */
-    --status-warn-bg: rgba(245, 158, 11, 0.16);
-    --status-warn-text: #fbbf24; /* Amber-400 */
-    --status-warn-border: rgba(251, 191, 36, 0.35);
+    --status-warn-bg: rgba(245, 170, 40, 0.14);
+    --status-warn-text: #f5bf55;
+    --status-warn-border: rgba(245, 191, 85, 0.32);
 
-    /* Status: Danger / Error (Red) */
-    --status-danger-bg: rgba(239, 68, 68, 0.16);
-    --status-danger-text: #f87171; /* Red-400 */
-    --status-danger-border: rgba(248, 113, 113, 0.35);
+    --status-danger-bg: rgba(240, 90, 80, 0.14);
+    --status-danger-text: #f6877d;
+    --status-danger-border: rgba(246, 135, 125, 0.32);
 
     color-scheme: dark;
   }
@@ -100,8 +138,29 @@ body {
   color: var(--ink);
   font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "tnum" 0, "cv11";
   min-height: 100vh;
   min-height: 100dvh;
+  overscroll-behavior-y: none;
+}
+
+/* Numbers that line up (scores, ratings, counts). */
+.tabular-nums { font-variant-numeric: tabular-nums; }
+
+/* One calm focus style for keyboards; nothing for taps. */
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+button:focus:not(:focus-visible) { outline: none; }
+
+/* Respect the system "reduce motion" setting as well as the in-app one. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }
 
 /* Custom smooth scrollbars */
@@ -129,7 +188,9 @@ body {
   --line: #000000;
   --ink: #000000;
   --ink-soft: #0f172a;
-  --color-brand: #0b5c55;
+  --brand: #0b5c55;
+  --brand-strong: #084842;
+  --ink-faint: #1e293b;
 
   --brand-pale: #e6fffa;
   --brand-border: #000000;

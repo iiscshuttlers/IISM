@@ -26,7 +26,7 @@ export function GuideButton({ variant = "ghost" }: { variant?: "ghost" | "second
               <span>IISc Badminton Training Camp</span>
             </div>
             <p className="text-xs text-ink-soft">
-              Courtside reference for match recording, ratings, attendance, and squad selection.
+              Courtside reference for match recording, ratings, attendance, and player assessments.
             </p>
           </Card>
 
@@ -36,17 +36,18 @@ export function GuideButton({ variant = "ghost" }: { variant?: "ghost" | "second
               <li><strong className="text-ink">Categories:</strong> MS, WS (2 players), MD, WD, XD (4 players). In XD, each side must have 1 male and 1 female.</li>
               <li><strong className="text-ink">Scores:</strong> Entering scores (e.g. 21-17, 19-21, 21-18) is optional. Marking the winner alone is accepted.</li>
               <li><strong className="text-ink">24-Hour Edit Window:</strong> The person who logged the match can edit it for up to 24 hours.</li>
-              <li><strong className="text-ink">24-Hour Dispute Window:</strong> Any participant in the match can dispute the result within 24 hours. Disputed matches are temporarily removed from Elo standings until a coach resolves or voids them.</li>
+              <li><strong className="text-ink">24-Hour Dispute Window:</strong> Any participant in the match can dispute the result within 24 hours. Disputed matches don't count towards ratings until a coach resolves or voids them.</li>
             </ul>
           </section>
 
           <section className="space-y-2">
-            <h3 className="font-bold text-base text-ink">2. Camp Elo Ratings</h3>
+            <h3 className="font-bold text-base text-ink">2. Camp rating</h3>
             <ul className="list-disc pl-5 space-y-1 text-xs text-ink-soft">
-              <li>Everyone begins at <strong className="text-ink">1200 rating</strong> points with $K=32$.</li>
-              <li>Doubles matches use the average rating of each pair to compute expected win probability.</li>
-              <li>Each rating shows a <strong className="text-ink">confidence</strong> dot (Glicko-2): red means too few matches to trust the number yet, green means it has settled. Coaches see the full strength range under Insights → Compare.</li>
-              <li>Rankings factor in rating, total wins, point differentials, and recent 5-match form (<span className="text-emerald-600 font-bold">W</span> / <span className="text-red-500 font-bold">L</span>).</li>
+              <li>Everyone starts at <strong className="text-ink">1200</strong>. Each confirmed match moves it up or down (the Elo system): beating a stronger side gains more than beating a weaker one, and losing to a weaker side costs more.</li>
+              <li>In doubles, each pair counts as the average of its two players.</li>
+              <li>Standings also show separate <strong className="text-ink">Singles, Doubles and Mixed</strong> ratings, each moved only by that kind of match. Overall counts every match.</li>
+              <li>The dot under a rating shows how <strong className="text-ink">settled</strong> it is: red means too few matches to trust it yet, green means it has settled. Coaches see a likely strength range under Insights → Compare.</li>
+              <li>Rank is by rating, then wins. Form shows your last 5 results (<span className="text-emerald-600 font-bold">W</span> / <span className="text-red-500 font-bold">L</span>), newest first.</li>
             </ul>
           </section>
 
@@ -76,11 +77,11 @@ export function GuideButton({ variant = "ghost" }: { variant?: "ghost" | "second
           </section>
 
           <section className="space-y-2">
-            <h3 className="font-bold text-base text-ink">4. Squad Selection</h3>
+            <h3 className="font-bold text-base text-ink">4. Players &amp; assessments</h3>
             <ul className="list-disc pl-5 space-y-1 text-xs text-ink-soft">
-              <li>Coaches evaluate technique, fitness, tactics, and attitude on a 1–5 scale.</li>
-              <li>Selected squad target is locked on the final day of camp.</li>
-              <li>Once published, players can view the selected and standby roster under <strong>Squad</strong>. Private coach assessments are never visible to players.</li>
+              <li>Coaches and the admin see every player on the <strong>Players</strong> tab: rating, wins, attendance, drill minutes, effort and coach score. Tap a name for the full record.</li>
+              <li>Tap <strong>Assess</strong> to score technique, fitness, tactics and attitude on a 1–5 scale.</li>
+              <li>Players never see coach scores.</li>
             </ul>
           </section>
 

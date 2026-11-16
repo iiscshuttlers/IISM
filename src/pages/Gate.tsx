@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { Copy, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase, errorText } from "../lib/supabase";
 import { useSession } from "../lib/session";
 import { useCreateCamp } from "../lib/api";
 import { Button, Card, Field, Input } from "../components/ui";
+import { AppLogo } from "../components/AppLogo";
 
 const Centered = ({ children }: { children: React.ReactNode }) => (
   <div className="flex min-h-screen items-center justify-center p-4">
@@ -28,6 +30,8 @@ export function SetupNeededPage() {
 export function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<"signin" | "signup">("signin");
+  // Google is how the camp signs in; email + password is a fallback, one tap away.
+  const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -79,58 +83,61 @@ export function LoginPage() {
   return (
     <Centered>
       <Card className="text-center">
-        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand text-lg font-bold text-white">TC</div>
-        <h1 className="text-xl font-bold">Training Camp</h1>
+        <AppLogo size={56} className="mx-auto mb-3 shadow-sm" />
+        <h1 className="text-xl font-bold">IISc Training Camp</h1>
         <p className="mb-5 mt-1 text-sm text-ink-soft">Private site for camp players and coaches.</p>
 
-        {/* Email / Password Form */}
-        <form onSubmit={handleEmailAuth} className="space-y-3 text-left mb-4">
-          <Field label="Email">
-            <Input
-              type="email"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@gmail.com"
-            />
-          </Field>
-          <Field label="Password">
-            <Input
-              type="password"
-              required
-              minLength={6}
-              autoComplete={mode === "signin" ? "current-password" : "new-password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-            />
-          </Field>
-
-          <Button type="submit" className="w-full" disabled={busy}>
-            {busy ? "Working…" : mode === "signin" ? "Sign in with password" : "Create password & sign up"}
-          </Button>
-
-          <div className="flex items-center justify-between text-xs pt-1">
-            <button
-              type="button"
-              onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-              className="text-brand font-semibold hover:underline"
-            >
-              {mode === "signin" ? "First time? Set a password" : "Already have a password? Sign in"}
-            </button>
-          </div>
-        </form>
-
-        <div className="relative my-4 flex items-center justify-center">
-          <div className="border-t border-line w-full" />
-          <span className="bg-surface px-2 text-[11px] font-medium text-ink-soft uppercase absolute">or</span>
-        </div>
-
-        {/* Google OAuth fallback */}
-        <Button variant="secondary" className="w-full" onClick={signInWithGoogle} disabled={busy}>
-          {busy ? "Opening Google…" : "Continue with Google"}
+        <Button className="w-full" onClick={signInWithGoogle} disabled={busy}>
+          {busy && !showPassword ? "Opening Google…" : "Continue with Google"}
         </Button>
+
+        {!showPassword ? (
+          <button type="button" onClick={() => setShowPassword(true)} className="mt-3 text-xs font-semibold text-brand hover:underline">
+            Use email and password instead
+          </button>
+        ) : (
+          <>
+            <div className="relative my-4 flex items-center justify-center">
+              <div className="w-full border-t border-line" />
+              <span className="absolute bg-surface px-2 text-[11px] font-medium uppercase text-ink-soft">or</span>
+            </div>
+            <form onSubmit={handleEmailAuth} className="space-y-3 text-left">
+              <Field label="Email">
+                <Input
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@gmail.com"
+                />
+              </Field>
+              <Field label="Password">
+                <Input
+                  type="password"
+                  required
+                  minLength={6}
+                  autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+              </Field>
+
+              <Button type="submit" variant="secondary" className="w-full" disabled={busy}>
+                {busy ? "Working…" : mode === "signin" ? "Sign in with password" : "Create password & sign up"}
+              </Button>
+
+              <button
+                type="button"
+                onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+                className="text-xs font-semibold text-brand hover:underline"
+              >
+                {mode === "signin" ? "First time? Set a password" : "Already have a password? Sign in"}
+              </button>
+            </form>
+          </>
+        )}
 
         <p className="mt-4 text-xs text-ink-soft">Use the email your camp admin added to the roster.</p>
         <a href={`${import.meta.env.BASE_URL}privacy.html`} className="mt-2 inline-block text-xs font-semibold text-brand">
@@ -143,15 +150,34 @@ export function LoginPage() {
 
 export function NotOnRosterPage() {
   const s = useSession();
+  const email = s.auth?.user.email ?? "";
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(email);
+      toast.success("Email copied");
+    } catch {
+      toast.error("Couldn't copy. Long-press the email to copy it.");
+    }
+  };
+  const askAdmin = () => {
+    const text = `Hi, I can't get into the training camp app. Please add ${email} to my profile on the camp roster.`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, "_blank");
+  };
   return (
     <Centered>
       <Card>
-        <h1 className="mb-2 text-lg font-bold">You're not on a camp roster</h1>
+        <h1 className="mb-2 text-lg font-bold">You're not on a camp roster yet</h1>
+        <p className="text-sm text-ink-soft">You signed in as:</p>
+        <p className="my-2 select-all break-all rounded-lg bg-surface-2 px-3 py-2 font-mono text-sm text-ink">{email}</p>
         <p className="mb-4 text-sm text-ink-soft">
-          Signed in as <strong>{s.auth?.user.email}</strong>. Ask the camp admin to add this email to your profile, then
-          sign in again.
+          Your camp admin needs to add this exact email to your profile. Then sign in again. If you meant to use a
+          different Google account, sign out and pick that one.
         </p>
-        <Button variant="secondary" className="w-full" onClick={s.signOut}>Sign out</Button>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="secondary" onClick={copy}><Copy size={14} /> Copy my email</Button>
+          <Button variant="secondary" onClick={askAdmin}><MessageCircle size={14} className="text-emerald-600" /> Message admin</Button>
+        </div>
+        <Button variant="ghost" className="mt-2 w-full" onClick={s.signOut}>Sign out and use another account</Button>
       </Card>
     </Centered>
   );
@@ -167,7 +193,10 @@ export function NoCampPage() {
       <Centered>
         <Card>
           <h1 className="mb-2 text-lg font-bold">No camp to show yet</h1>
-          <p className="mb-4 text-sm text-ink-soft">The camp is currently visible to coaches only. Check back later.</p>
+          <p className="mb-4 text-sm text-ink-soft">
+            You're on the roster, but your camp isn't open to players right now. Your coaches will open it when the camp
+            starts. Check back then.
+          </p>
           <Button variant="secondary" className="w-full" onClick={s.signOut}>Sign out</Button>
         </Card>
       </Centered>

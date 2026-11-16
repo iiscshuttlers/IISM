@@ -194,7 +194,7 @@ function Compare({ campId }: { campId: string }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-ink-soft">Pick up to three players to compare side by side. The strength range is the Glicko-2 rating ± 2 deviations (about 95% likely); it narrows as a player plays more.</p>
+      <p className="text-xs text-ink-soft">Pick up to three players to compare side by side. The strength range is where a player's true level most likely sits (about 95% sure), on a separate 1500-based scale used only for this; it narrows as they play more.</p>
       <div className="grid grid-cols-3 gap-2">
         {[0, 1, 2].map((i) => (
           <Select key={i} aria-label={`Player ${i + 1}`} value={picked[i] ?? ""}
@@ -210,19 +210,19 @@ function Compare({ campId }: { campId: string }) {
         ))}
       </div>
       {cols.length === 0 ? <Empty>Choose players above.</Empty> : (
-        <Card className="overflow-x-auto !p-0">
-          <table className="w-full text-sm">
+        <Card className="overflow-hidden !p-0">
+          <table className="w-full text-[13px] [overflow-wrap:anywhere] sm:text-sm">
             <thead className="bg-surface-2 text-xs text-ink-soft">
               <tr>
-                <th className="px-3 py-2 text-left font-semibold" />
-                {cols.map((c) => <th key={c.id} className="px-3 py-2 text-right font-bold text-ink">{name(c.id)}</th>)}
+                <th className="px-2 py-2 sm:px-3 text-left font-semibold" />
+                {cols.map((c) => <th key={c.id} className="px-2 py-2 sm:px-3 text-right font-bold text-ink">{name(c.id)}</th>)}
               </tr>
             </thead>
             <tbody>
               {cols[0].rows.map(([label], r) => (
                 <tr key={label} className="border-t border-line">
-                  <td className="px-3 py-2 text-xs text-ink-soft">{label}</td>
-                  {cols.map((c) => <td key={c.id} className="px-3 py-2 text-right tabular-nums capitalize">{c.rows[r][1]}</td>)}
+                  <td className="px-2 py-2 sm:px-3 text-xs text-ink-soft">{label}</td>
+                  {cols.map((c) => <td key={c.id} className="px-2 py-2 sm:px-3 text-right tabular-nums capitalize">{c.rows[r][1]}</td>)}
                 </tr>
               ))}
             </tbody>
@@ -254,22 +254,22 @@ function Pairs({ campId }: { campId: string }) {
         <span>matches together</span>
       </div>
       {rows.length === 0 ? <Empty><UsersRound className="mx-auto mb-1" size={20} />No doubles pairs with enough matches yet.</Empty> : (
-        <Card className="overflow-x-auto !p-0">
-          <table className="w-full text-sm">
+        <Card className="overflow-hidden !p-0">
+          <table className="w-full text-[13px] [overflow-wrap:anywhere] sm:text-sm">
             <thead className="bg-surface-2 text-xs text-ink-soft">
               <tr>
-                <th className="px-3 py-2 text-left">Pair</th>
-                <th className="px-3 py-2 text-right">W / P</th>
-                <th className="px-3 py-2 text-right">Win %</th>
-                <th className="px-3 py-2 text-right">Lift</th>
+                <th className="px-2 py-2 sm:px-3 text-left">Pair</th>
+                <th className="px-2 py-2 sm:px-3 text-right">W / P</th>
+                <th className="px-2 py-2 sm:px-3 text-right">Win %</th>
+                <th className="px-2 py-2 sm:px-3 text-right">Lift</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((p) => (
                 <tr key={`${p.a}|${p.b}`} className="border-t border-line">
-                  <td className="px-3 py-2 font-semibold text-ink">{name(p.a)} &amp; {name(p.b)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{p.won} / {p.played}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{Math.round((100 * p.won) / p.played)}%</td>
+                  <td className="px-2 py-2 sm:px-3 font-semibold text-ink">{name(p.a)} &amp; {name(p.b)}</td>
+                  <td className="px-2 py-2 sm:px-3 text-right tabular-nums">{p.won} / {p.played}</td>
+                  <td className="px-2 py-2 sm:px-3 text-right tabular-nums">{Math.round((100 * p.won) / p.played)}%</td>
                   <td className={cx("px-3 py-2 text-right tabular-nums font-semibold",
                     p.lift == null ? "text-ink-soft" : p.lift > 0.05 ? "text-status-success-text" : p.lift < -0.05 ? "text-status-danger-text" : "text-ink")}>
                     {p.lift == null ? "—" : `${p.lift > 0 ? "+" : ""}${Math.round(p.lift * 100)}%`}
@@ -346,25 +346,25 @@ function Load({ campId }: { campId: string }) {
         </Card>
       )}
       {players.length === 0 ? <Empty><Users className="mx-auto mb-1" size={20} />No players yet.</Empty> : (
-        <Card className="overflow-x-auto !p-0">
-          <table className="w-full text-sm">
+        <Card className="overflow-hidden !p-0">
+          <table className="w-full text-[13px] [overflow-wrap:anywhere] sm:text-sm">
             <thead className="bg-surface-2 text-xs text-ink-soft">
               <tr>
-                <th className="px-3 py-2 text-left">Player</th>
-                <th className="px-3 py-2 text-right">Load 7d</th>
-                <th className="px-3 py-2 text-right">Prev 7d</th>
-                <th className="px-3 py-2 text-right"><HeartPulse size={13} className="inline" /> Readiness</th>
+                <th className="px-2 py-2 sm:px-3 text-left">Player</th>
+                <th className="px-2 py-2 sm:px-3 text-right">Load 7d</th>
+                <th className="px-2 py-2 sm:px-3 text-right">Prev 7d</th>
+                <th className="px-2 py-2 sm:px-3 text-right"><HeartPulse size={13} className="inline" /> Readiness</th>
               </tr>
             </thead>
             <tbody>
               {rows.map(({ p, l, latest, fresh, score }) => (
                 <tr key={p.id} className="border-t border-line">
-                  <td className="px-3 py-2 font-semibold text-ink">
+                  <td className="px-2 py-2 sm:px-3 font-semibold text-ink">
                     {p.full_name} {l?.spike && <Badge tone="warn">Spike</Badge>}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{l?.week ?? 0}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-ink-soft">{l?.prevWeek ?? 0}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">
+                  <td className="px-2 py-2 sm:px-3 text-right tabular-nums">{l?.week ?? 0}</td>
+                  <td className="px-2 py-2 sm:px-3 text-right tabular-nums text-ink-soft">{l?.prevWeek ?? 0}</td>
+                  <td className="px-2 py-2 sm:px-3 text-right tabular-nums">
                     {score === null ? <span className="text-ink-soft">—</span> : (
                       <span className={cx("font-semibold", score < 40 ? "text-status-danger-text" : score < 65 ? "text-status-warn-text" : "text-status-success-text")}>
                         {score}

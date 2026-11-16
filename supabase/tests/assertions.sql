@@ -831,4 +831,114 @@ DO $$ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 
+-- 18. (0005) Court count: staff set it, courts above it are freed, players can't change it.
+SELECT pg_temp.as_user(:u_p1, 'p1@x.test');
+DO $$ BEGIN
+  BEGIN
+    PERFORM public.set_court_count((SELECT v FROM ids WHERE k='scamp'), 2);
+    RAISE EXCEPTION 'player changed the court count';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN
+    UPDATE public.camps SET court_count = 1 WHERE id = (SELECT v FROM ids WHERE k='scamp');
+    RAISE EXCEPTION 'direct court_count update allowed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+DO $$ BEGIN
+  IF (SELECT court_count FROM public.camps WHERE id = (SELECT v FROM ids WHERE k='scamp')) <> 4 THEN
+    RAISE EXCEPTION 'court_count default is not 4';
+  END IF;
+  PERFORM public.set_court_count((SELECT v FROM ids WHERE k='scamp'), 3);
+  IF NOT EXISTS (SELECT 1 FROM public.court_allocations WHERE court_num = 2) THEN RAISE EXCEPTION 'court within the count was freed'; END IF;
+  PERFORM public.set_court_count((SELECT v FROM ids WHERE k='scamp'), 1);
+  IF (SELECT court_count FROM public.camps WHERE id = (SELECT v FROM ids WHERE k='scamp')) <> 1 THEN RAISE EXCEPTION 'coach could not set courts'; END IF;
+  IF EXISTS (SELECT 1 FROM public.court_allocations WHERE court_num > 1) THEN RAISE EXCEPTION 'court above the count kept its allocation'; END IF;
+  BEGIN
+    PERFORM public.set_court_count((SELECT v FROM ids WHERE k='scamp'), 9);
+    RAISE EXCEPTION 'court count above 8 accepted';
+  EXCEPTION WHEN raise_exception THEN IF SQLERRM <> 'invalid_court_count' THEN RAISE; END IF; END;
+END $$;
+
+-- 19. (0006) Updating attendance, sessions and drills works; rows still can't move.
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+INSERT INTO public.attendance (session_id, person_id, status)
+VALUES ((SELECT v FROM ids WHERE k='ssess'), (SELECT v FROM ids WHERE k='p2'), 'present');
+UPDATE public.attendance SET status = 'late', rpe = 6
+ WHERE session_id = (SELECT v FROM ids WHERE k='ssess') AND person_id = (SELECT v FROM ids WHERE k='p2');
+INSERT INTO public.attendance (session_id, person_id, status)
+VALUES ((SELECT v FROM ids WHERE k='ssess'), (SELECT v FROM ids WHERE k='p2'), 'absent')
+ON CONFLICT (session_id, person_id) DO UPDATE SET status = EXCLUDED.status;
+UPDATE public.sessions SET title = 'Renamed session' WHERE id = (SELECT v FROM ids WHERE k='ssess');
+INSERT INTO public.session_drills (session_id, drill_name) VALUES ((SELECT v FROM ids WHERE k='ssess'), 'Net kills');
+UPDATE public.session_drills SET duration_min = 15 WHERE session_id = (SELECT v FROM ids WHERE k='ssess');
+DO $$ BEGIN
+  IF (SELECT status || rpe FROM public.attendance
+      WHERE session_id = (SELECT v FROM ids WHERE k='ssess') AND person_id = (SELECT v FROM ids WHERE k='p2')) <> 'absent6' THEN
+    RAISE EXCEPTION 'attendance update did not apply';
+  END IF;
+  IF (SELECT title FROM public.sessions WHERE id = (SELECT v FROM ids WHERE k='ssess')) <> 'Renamed session' THEN
+    RAISE EXCEPTION 'session update did not apply';
+  END IF;
+  IF (SELECT duration_min FROM public.session_drills WHERE session_id = (SELECT v FROM ids WHERE k='ssess')) <> 15 THEN
+    RAISE EXCEPTION 'drill update did not apply';
+  END IF;
+  BEGIN
+    UPDATE public.attendance SET person_id = (SELECT v FROM ids WHERE k='coach')
+     WHERE session_id = (SELECT v FROM ids WHERE k='ssess') AND person_id = (SELECT v FROM ids WHERE k='p2');
+    RAISE EXCEPTION 'attendance moved to another person';
+  EXCEPTION
+    WHEN raise_exception THEN IF SQLERRM <> 'immutable_person' THEN RAISE; END IF;
+    WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    UPDATE public.session_drills SET session_id = (SELECT v FROM ids WHERE k='osess');
+    RAISE EXCEPTION 'drill moved to another session';
+  EXCEPTION
+    WHEN raise_exception THEN IF SQLERRM <> 'immutable_session' THEN RAISE; END IF;
+    WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+
+-- 20. (0006) Permanent delete: admin only, voided matches only.
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+INSERT INTO ids SELECT 'dmatch', public.record_match((SELECT v FROM ids WHERE k='scamp'), current_date, 'MS',
+  (SELECT v FROM ids WHERE k='p1'), NULL, (SELECT v FROM ids WHERE k='p2'), NULL, NULL, 1::smallint);
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+DO $$ BEGIN
+  BEGIN PERFORM public.delete_match((SELECT v FROM ids WHERE k='dmatch')); RAISE EXCEPTION 'coach deleted a match';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+DO $$ BEGIN
+  BEGIN PERFORM public.delete_match((SELECT v FROM ids WHERE k='dmatch')); RAISE EXCEPTION 'deleted a match that was not voided';
+  EXCEPTION WHEN raise_exception THEN IF SQLERRM <> 'void_first' THEN RAISE; END IF; END;
+  PERFORM public.resolve_match((SELECT v FROM ids WHERE k='dmatch'), 'void', NULL, 1::smallint);
+  PERFORM public.delete_match((SELECT v FROM ids WHERE k='dmatch'));
+  IF EXISTS (SELECT 1 FROM public.matches WHERE id = (SELECT v FROM ids WHERE k='dmatch')) THEN RAISE EXCEPTION 'match not deleted'; END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM public.activity WHERE match_id = (SELECT v FROM ids WHERE k='dmatch')) THEN
+    RAISE EXCEPTION 'deleted match left activity rows';
+  END IF;
+END $$;
+
+-- 21. (0006) Discipline ratings: singles, doubles and mixed move separately from overall.
+-- gcamp: g1 beat g2 in MS, then g2+g4 beat g1+g3 in XD.
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN SELECT i.k, s.rating, s.rating_singles, s.rating_doubles, s.rating_mixed,
+                  s.played_singles, s.played_doubles, s.played_mixed
+             FROM public.get_standings((SELECT v FROM ids WHERE k='gcamp')) s JOIN ids i ON i.v = s.person_id LOOP
+    IF (r.k, r.rating, r.rating_singles, r.rating_doubles, r.rating_mixed, r.played_singles, r.played_doubles, r.played_mixed)
+       NOT IN (('g1', 1199, 1216, 1200, 1184, 1, 0, 1), ('g2', 1201, 1184, 1200, 1216, 1, 0, 1),
+               ('g3', 1183, 1200, 1200, 1184, 0, 0, 1), ('g4', 1217, 1200, 1200, 1216, 0, 0, 1)) THEN
+      RAISE EXCEPTION 'discipline ratings wrong: % % % % % % % %', r.k, r.rating, r.rating_singles, r.rating_doubles,
+        r.rating_mixed, r.played_singles, r.played_doubles, r.played_mixed;
+    END IF;
+  END LOOP;
+END $$;
+
 SELECT 'ALL TRAINING CAMP ASSERTIONS PASSED' AS result;

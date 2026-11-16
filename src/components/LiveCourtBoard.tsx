@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Play, Sparkles, Check, X, Swords, Dumbbell } from "lucide-react";
-import { Badge, Button, Card, Sheet } from "./ui";
+import { Badge, Button, Card, ConfirmDialog, Sheet, cx } from "./ui";
 import { toast } from "sonner";
 import { errorText } from "../lib/supabase";
-import { COURT_NUMBERS, useCourtMutations, useCourts, type CourtAllocation } from "../lib/sharedData";
+import { MAX_COURTS, courtNumbers, useCourtMutations, useCourts, type CourtAllocation } from "../lib/sharedData";
+import { useSession } from "../lib/session";
 import type { Member } from "../lib/types";
 
 /** A court on the board: its allocation, or open when nothing is assigned. */
@@ -34,7 +35,10 @@ export function LiveCourtBoard({
   // Shared by the whole camp: coaches assign courts, everyone sees the board update live.
   const courtsQ = useCourts(campId);
   const mut = useCourtMutations(campId);
-  const courts: CourtView[] = COURT_NUMBERS.map(
+  const courtCount = useSession().camp?.court_count ?? 4;
+  const [choosingCount, setChoosingCount] = useState(false);
+  const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const courts: CourtView[] = courtNumbers(courtCount).map(
     (n) =>
       courtsQ.data?.find((c) => c.court_num === n) ?? {
         court_num: n, status: "open", title: `Court ${n} available`, subtitle: null, started_at: null,
@@ -48,6 +52,21 @@ export function LiveCourtBoard({
   const [formTitle, setFormTitle] = useState("");
   const [formSubtitle, setFormSubtitle] = useState("");
   const onErr = (e: unknown) => toast.error(errorText(e));
+
+  const busyAbove = (n: number) => (courtsQ.data ?? []).filter((c) => c.court_num > n);
+  const chooseCount = (n: number) => {
+    setChoosingCount(false);
+    if (n === courtCount) return;
+    if (busyAbove(n).length) setPendingCount(n);
+    else applyCount(n);
+  };
+  const applyCount = (n: number) => {
+    setPendingCount(null);
+    mut.setCount.mutate(n, {
+      onSuccess: () => toast.success(`Board set to ${n} court${n === 1 ? "" : "s"}`),
+      onError: onErr,
+    });
+  };
 
   const handleOpenAssign = (c: CourtView) => {
     setSelectedCourt(c);
@@ -93,18 +112,56 @@ export function LiveCourtBoard({
   return (
     <>
       <Card className="border-line bg-surface">
-        <div className="flex items-center justify-between mb-3">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-status-success-text animate-pulse" />
-            <h3 className="text-sm font-bold text-ink">Live Courts (1–4)</h3>
+            <h3 className="text-sm font-bold text-ink">Live courts</h3>
           </div>
           <p className="text-[11px] text-ink-soft">
-            {courts.filter((c) => c.status !== "open").length} of 4 courts active
+            {courts.filter((c) => c.status !== "open").length} of {courtCount} active
+            {isStaff && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  onClick={() => setChoosingCount((v) => !v)}
+                  aria-expanded={choosingCount}
+                  className="font-semibold text-brand hover:underline"
+                >
+                  Courts: {courtCount} · Change
+                </button>
+              </>
+            )}
           </p>
         </div>
 
         {/* 2x2 or 4x1 Badminton Courts Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+        {isStaff && choosingCount && (
+          <div className="mb-3 rounded-xl border border-brand/40 bg-brand-pale/30 p-2.5">
+            <p className="mb-2 text-xs font-semibold text-ink">How many courts are you using?</p>
+            <div className="grid grid-cols-8 gap-1">
+              {Array.from({ length: MAX_COURTS }, (_, i) => i + 1).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => chooseCount(n)}
+                  disabled={mut.setCount.isPending}
+                  aria-pressed={n === courtCount}
+                  aria-label={`${n} court${n === 1 ? "" : "s"}`}
+                  className={cx(
+                    "min-h-[40px] rounded-lg border text-sm font-bold",
+                    n === courtCount ? "border-brand-border bg-brand-pale text-brand" : "border-line bg-surface text-ink",
+                  )}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* One column on the narrowest phones so names and buttons never get squeezed. */}
+        <div className={cx("grid gap-2", courtCount === 1 ? "grid-cols-1" : courtCount <= 4 ? "grid-cols-1 min-[360px]:grid-cols-2" : "grid-cols-1 min-[360px]:grid-cols-2 sm:grid-cols-4")}>
           {courts.map((court) => {
             const isMatch = court.status === "match";
             const isDrill = court.status === "drill";
@@ -122,23 +179,18 @@ export function LiveCourtBoard({
             return (
               <div
                 key={court.court_num}
-                className={`relative rounded-xl border p-3 flex flex-col justify-between transition-all ${
-                  isMatch
-                    ? "bg-status-success-bg/25 border-status-success-border/70 shadow-2xs"
-                    : isDrill
-                    ? "bg-brand/5 border-brand/40 shadow-2xs"
-                    : isWarmup
-                    ? "bg-status-warn-bg/20 border-status-warn-border/70"
-                    : "bg-surface-2/40 border-line/80"
-                }`}
+                className={cx(
+                  "relative flex flex-col justify-between rounded-xl p-3 transition-colors",
+                  isMatch ? "bg-status-success-bg" : isDrill ? "bg-brand-pale" : isWarmup ? "bg-status-warn-bg" : "bg-surface-2/70",
+                )}
               >
                 <div>
-                  <div className="flex items-center justify-between gap-1 mb-2">
-                    <span className="font-black text-xs text-ink uppercase tracking-wider">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-1">
+                    <span className="whitespace-nowrap text-xs font-bold uppercase tracking-wide text-ink-soft">
                       Court {court.court_num}
                     </span>
                     <Badge tone={tone}>
-                      {isMatch ? "Match Play" : isDrill ? "Drill Session" : isWarmup ? "Warmup" : "Open"}
+                      {isMatch ? "Match" : isDrill ? "Drill" : isWarmup ? "Warm-up" : "Open"}
                     </Badge>
                   </div>
 
@@ -149,13 +201,15 @@ export function LiveCourtBoard({
                     <p className="text-[11px] text-ink-soft truncate mt-0.5">{court.subtitle}</p>
                   )}
                   {court.started_at && !isOpen && (
-                    <p className="text-[10px] text-ink-soft font-mono mt-1">
+                    <p className="mt-1 text-[11px] tabular-nums text-ink-soft">
                       Started: {fmtTime(court.started_at)}
                     </p>
                   )}
                 </div>
 
-                <div className="mt-3 pt-2 border-t border-line/60 flex items-center justify-between gap-1">
+                {/* Players without actions get no empty strip. */}
+                {(onRecordMatchOnCourt || isStaff) && (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-1 border-t border-line/60 pt-2">
                   {onRecordMatchOnCourt && (
                     <button
                       type="button"
@@ -191,11 +245,23 @@ export function LiveCourtBoard({
                     </div>
                   )}
                 </div>
+                )}
               </div>
             );
           })}
         </div>
       </Card>
+
+      <ConfirmDialog
+        open={pendingCount !== null}
+        title={`Use ${pendingCount} court${pendingCount === 1 ? "" : "s"}?`}
+        message={pendingCount !== null
+          ? `${busyAbove(pendingCount).map((c) => `Court ${c.court_num} (${c.title})`).join(", ")} will be cleared.`
+          : undefined}
+        confirmLabel="Change courts"
+        onConfirm={() => pendingCount !== null && applyCount(pendingCount)}
+        onCancel={() => setPendingCount(null)}
+      />
 
       {/* Assign Court Modal */}
       {selectedCourt && (

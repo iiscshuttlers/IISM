@@ -14,6 +14,8 @@ export interface Camp {
   publish_selection: boolean;
   activity_enabled: boolean;
   selection_locked_at: string | null;
+  /** Courts on the live board (migration 0005). Missing before that migration runs: treat as 4. */
+  court_count?: number;
 }
 
 export interface Person {
@@ -70,6 +72,13 @@ export interface Standing {
   /** Glicko-2 rating (starts 1500) and its deviation; ±2·RD is a ~95% range. */
   glicko: number;
   glicko_rd: number;
+  /** Ratings that only move with that discipline's matches (migration 0006; absent before it). */
+  rating_singles?: number;
+  rating_doubles?: number;
+  rating_mixed?: number;
+  played_singles?: number;
+  played_doubles?: number;
+  played_mixed?: number;
 }
 
 export interface Session {

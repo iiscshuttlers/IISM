@@ -181,7 +181,7 @@ export function TacticalBoardModal({
         </div>
 
         {/* Formation Presets */}
-        <div className="flex items-center gap-1.5 overflow-x-auto text-[11px] pb-1">
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
           <span className="text-ink-soft uppercase font-bold text-[10px] mr-1">Formations:</span>
           <button
             type="button"

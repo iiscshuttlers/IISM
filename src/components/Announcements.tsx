@@ -49,77 +49,55 @@ export function AnnouncementBanner({
   };
 
   return (
-    <Card
-      className={cx(
-        "p-3.5 border transition-all shadow-xs",
-        isUrgent
-          ? "border-status-danger-border bg-status-danger-bg/40"
-          : isImportant
-          ? "border-status-warn-border bg-status-warn-bg/40"
-          : "border-brand-border bg-brand-pale/40"
-      )}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-2.5 min-w-0">
-          <div className="shrink-0 mt-0.5">
-            {isUrgent ? (
-              <AlertCircle size={18} className="text-status-danger-text animate-pulse" />
-            ) : isImportant ? (
-              <AlertTriangle size={18} className="text-status-warn-text" />
-            ) : (
-              <Megaphone size={18} className="text-brand" />
-            )}
-          </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
-              <span
-                className={cx(
-                  "text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border",
-                  isUrgent
-                    ? "bg-status-danger-bg text-status-danger-text border-status-danger-border"
-                    : isImportant
-                    ? "bg-status-warn-bg text-status-warn-text border-status-warn-border"
-                    : "bg-brand-pale text-brand border-brand-border"
-                )}
-              >
-                {top.priority} announcement
+    <Card className="relative overflow-hidden !p-0">
+      <span
+        aria-hidden
+        className={cx("absolute inset-y-0 left-0 w-1", isUrgent ? "bg-status-danger-text" : isImportant ? "bg-status-warn-text" : "bg-brand")}
+      />
+      <div className="flex items-start gap-3 py-3.5 pl-5 pr-4">
+        <span className={cx(
+          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+          isUrgent ? "bg-status-danger-bg text-status-danger-text" : isImportant ? "bg-status-warn-bg text-status-warn-text" : "bg-brand-pale text-brand",
+        )}>
+          {isUrgent ? <AlertCircle size={16} /> : isImportant ? <AlertTriangle size={16} /> : <Megaphone size={16} />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className={cx(
+            "text-[11px] font-semibold uppercase tracking-wide",
+            isUrgent ? "text-status-danger-text" : isImportant ? "text-status-warn-text" : "text-brand",
+          )}>
+            {isUrgent ? "Urgent" : isImportant ? "Important" : "Notice"}
+            {top.expires_on && (
+              <span className="ml-2 inline-flex items-center gap-1 font-medium normal-case tracking-normal text-ink-faint">
+                <Clock size={10} /> until {fmtDate(top.expires_on)}
               </span>
-              {top.expires_on && (
-                <span className="text-[10px] text-ink-soft flex items-center gap-1">
-                  <Clock size={10} /> Valid until {fmtDate(top.expires_on)}
-                </span>
+            )}
+          </p>
+          <p className="mt-0.5 font-semibold text-ink">{top.title}</p>
+          <p className="mt-0.5 whitespace-pre-wrap text-sm text-ink-soft">{top.message}</p>
+          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-faint">
+              <span>
+                {author}
+                {isStaff && ` · ${top.read_by.length} read`}
+                {list.length > 1 && ` · ${list.length - 1} more`}
+              </span>
+              {onOpenManager && (
+                <button type="button" onClick={onOpenManager} className="font-semibold text-brand hover:underline">
+                  {isStaff ? "Manage" : list.length > 1 ? "See all" : "History"}
+                </button>
               )}
-            </div>
-            <p className="text-xs font-bold text-ink">{top.title}</p>
-            <p className="text-xs text-ink-soft mt-0.5 whitespace-pre-wrap">{top.message}</p>
-            <p className="text-[10px] text-ink-soft mt-1.5">
-              Posted by {author}
-              {isStaff && ` · ${top.read_by.length} acknowledged`}
-              {list.length > 1 && ` · ${list.length - 1} more`}
             </p>
+            {meId && !isRead ? (
+              <Button size="sm" variant="secondary" onClick={handleAcknowledge} disabled={mut.acknowledge.isPending} className="shrink-0">
+                <Check size={14} className="text-brand" /> Got it
+              </Button>
+            ) : isRead ? (
+              <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-status-success-text">
+                <Check size={13} /> Read
+              </span>
+            ) : null}
           </div>
-        </div>
-
-        <div className="flex flex-col items-end gap-1.5 shrink-0">
-          {meId && !isRead && (
-            <Button size="sm" onClick={handleAcknowledge} disabled={mut.acknowledge.isPending} className="!text-xs !py-1">
-              <Check size={14} /> Got it
-            </Button>
-          )}
-          {isRead && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-status-success-text">
-              <Check size={12} /> Read
-            </span>
-          )}
-          {onOpenManager && (
-            <button
-              type="button"
-              onClick={onOpenManager}
-              className="text-[11px] text-brand hover:underline font-semibold"
-            >
-              {isStaff ? "Manage" : list.length > 1 ? "See all" : "History"}
-            </button>
-          )}
         </div>
       </div>
     </Card>

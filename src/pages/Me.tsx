@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import {
   Bell, BookOpen, Calendar, ChevronRight, HeartPulse, History, LogOut, Megaphone, MessageSquare,
-  Package, Settings, SlidersHorizontal, TrendingUp, Trophy,
+  LineChart, Package, Settings, SlidersHorizontal, TrendingUp, Trophy,
 } from "lucide-react";
 import { useSession } from "../lib/session";
 import { useMatches, useMembers, useSessions, useStandings } from "../lib/api";
@@ -60,7 +60,7 @@ export default function MePage() {
 
       {isPlayer && (
         <section className="space-y-2">
-          <h2 className="text-sm font-bold text-ink-soft">Your camp record</h2>
+          <h2 className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-faint">Your camp record</h2>
           {myRow ? (
             <Card>
               <div className="grid grid-cols-4 gap-2 text-center">
@@ -85,7 +85,7 @@ export default function MePage() {
       )}
 
       <section className="space-y-2">
-        <h2 className="text-sm font-bold text-ink-soft">{isPlayer ? "Just for you and your coaches" : "Your records"}</h2>
+        <h2 className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-faint">{isPlayer ? "Just for you and your coaches" : "Your records"}</h2>
         <Card className="divide-y divide-line !p-0">
           <Row icon={<MessageSquare size={17} />} title="Post-practice reflections" hint="What went well, what to work on next" onClick={() => setOpen("reflections")} />
           <Row
@@ -99,9 +99,10 @@ export default function MePage() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-bold text-ink-soft">Camp</h2>
+        <h2 className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-faint">Camp</h2>
         <Card className="divide-y divide-line !p-0">
-          <Row icon={<Megaphone size={17} />} title="Announcements" hint="Every notice from your coaches" onClick={() => setOpen("announcements")} />
+          {s.isStaff && <Row icon={<LineChart size={17} />} title="Insights & coaching prompts" hint="Compare players, pairs, training load and readiness" href="/insights" />}
+          <Row icon={<Megaphone size={17} />} title="Announcements" hint={s.isStaff ? "Post and manage notices" : "Every notice from your coaches"} onClick={() => setOpen("announcements")} />
           <Row icon={<BookOpen size={17} />} title="Skill & drill library" hint="Technique cues and practice drills" onClick={() => setOpen("skills")} />
           <Row icon={<Calendar size={17} />} title="Add sessions to my calendar" onClick={() => setOpen("calendar")} />
           <Row icon={<Package size={17} />} title="Camp gear" hint="Shuttles, rackets and training aids" onClick={() => setOpen("gear")} />
@@ -110,7 +111,7 @@ export default function MePage() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-bold text-ink-soft">App</h2>
+        <h2 className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-faint">App</h2>
         <Card className="divide-y divide-line !p-0">
           <Row icon={<SlidersHorizontal size={17} />} title="Display & accessibility" hint="Text size, outdoor contrast, motion" onClick={() => setOpen("display")} />
           <Row icon={<Bell size={17} />} title="Notifications" hint="Match updates and alerts" href="/activity" />

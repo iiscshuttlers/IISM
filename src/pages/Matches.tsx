@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { Plus, Play, Search, Trophy } from "lucide-react";
+import { Plus, Radio, Search, Sparkles, Trophy, X } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
 import { useMatchMutations, useMatches, useMembers, useStandings, type MatchInput } from "../lib/api";
@@ -11,7 +11,7 @@ import { MatchCard } from "../components/MatchCard";
 import { PairingHelperModal } from "../components/PairingHelper";
 import { LiveCourtScorer } from "../components/LiveCourtScorer";
 import { TournamentGeneratorModal } from "../components/TournamentGenerator";
-import { Button, ConfirmDialog, Empty, Field, Input, PageTitle, Segmented, Sheet, Textarea, cx } from "../components/ui";
+import { Button, Card, Chip, ConfirmDialog, Empty, Field, Input, PageTitle, ChipRow, Section, Segmented, Sheet, Skeleton, Textarea, cx, dayLabel } from "../components/ui";
 import type { Category } from "../lib/scores";
 import type { Match } from "../lib/types";
 import { useTodayAttendance } from "../lib/today";
@@ -31,6 +31,7 @@ export default function MatchesPage() {
   );
   const [catFilter, setCatFilter] = useState<string>("ALL");
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [liveScoring, setLiveScoring] = useState(false);
   const [tournamentOpen, setTournamentOpen] = useState(false);
@@ -39,6 +40,7 @@ export default function MatchesPage() {
   const [disputing, setDisputing] = useState<Match | null>(null);
   const [resolving, setResolving] = useState<Match | null>(null);
   const [deletingMatch, setDeletingMatch] = useState<Match | null>(null);
+  const [deletingForever, setDeletingForever] = useState<Match | null>(null);
   const [reason, setReason] = useState("");
 
   const handleResolveClick = (m: Match) => {
@@ -65,7 +67,7 @@ export default function MatchesPage() {
       {
         onSuccess: () => {
           setDeletingMatch(null);
-          toast.success("Match deleted from standings", {
+          toast.success("Match voided", {
             action: {
               label: "Undo",
               onClick: () => {
@@ -95,6 +97,20 @@ export default function MatchesPage() {
     if (cat && slots?.length === 4) setPrefill({ category: cat, slots });
     setRecording(true);
   }, []);
+  // ?match=<id> (from an activity alert): scroll to that match and highlight it briefly.
+  const [highlight, setHighlight] = useState<string | null>(() => new URLSearchParams(window.location.search).get("match"));
+  useEffect(() => {
+    if (!highlight || !matches.data) return;
+    if (!matches.data.some((m) => m.id === highlight)) {
+      toast.info("That match is no longer in the list.");
+      setHighlight(null);
+      return;
+    }
+    const t1 = window.setTimeout(() => document.getElementById(`match-${highlight}`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 50);
+    const t2 = window.setTimeout(() => setHighlight(null), 4000);
+    return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
+  }, [highlight, matches.data]);
+
   const pending = useOutbox(campId);
   const recentLineups = useMemo<Lineup[]>(() => {
     const seen = new Set<string>();
@@ -159,105 +175,95 @@ export default function MatchesPage() {
   });
   const disputedCount = (matches.data ?? []).filter((m) => m.status === "disputed").length;
 
+  // One card per day: results read as a feed, not a pile of separate boxes.
+  const days: { day: string; items: Match[] }[] = [];
+  for (const m of list) {
+    const last = days[days.length - 1];
+    if (last && last.day === m.played_on.slice(0, 10)) last.items.push(m);
+    else days.push({ day: m.played_on.slice(0, 10), items: [m] });
+  }
+
   return (
     <div>
       <PageTitle
+        sub={`${(matches.data ?? []).filter((m) => m.status !== "void").length} results this camp`}
         action={
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setLiveScoring(true)}
-              className="flex items-center gap-1.5"
-            >
-              <Play size={14} className="text-emerald-600 fill-emerald-600" />
-              <span>Live<span className="hidden sm:inline"> Court</span></span>
-            </Button>
-
-            {players.length >= 2 && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setTournamentOpen(true)}
-                className="flex items-center gap-1.5"
-              >
-                <Trophy size={14} className="text-amber-500" />
-                <span><span className="hidden sm:inline">Tournaments</span><span className="sm:hidden">Tourney</span></span>
-              </Button>
-            )}
-
-            {players.length >= 2 && (
-              <PairingHelperModal
-                players={players}
-                matches={matches.data ?? []}
-                standings={standings.data ?? []}
-                onSelectMatch={(cat, slots) => {
-                  setPrefill({ category: cat, slots });
-                  setRecording(true);
-                }}
-              />
-            )}
-            <Button
-              size="sm"
-              onClick={() => {
-                setPrefill(null);
-                setRecording(true);
-              }}
-            >
-              <Plus size={16} /> Record
-            </Button>
-          </div>
+          <Button onClick={() => { setPrefill(null); setRecording(true); }}>
+            <Plus size={16} /> Record
+          </Button>
         }
       >
         Matches
       </PageTitle>
+
+      <ChipRow className="mb-5">
+        <button type="button" onClick={() => setLiveScoring(true)} className={TOOL}>
+          <Radio size={15} className="text-brand" /> Live scorer
+        </button>
+        {players.length >= 2 && (
+          <PairingHelperModal
+            players={players}
+            matches={matches.data ?? []}
+            standings={standings.data ?? []}
+            onSelectMatch={(cat, slots) => {
+              setPrefill({ category: cat, slots });
+              setRecording(true);
+            }}
+            renderTrigger={(open) => (
+              <button type="button" onClick={open} className={TOOL}>
+                <Sparkles size={15} className="text-amber-500" /> Who plays next?
+              </button>
+            )}
+          />
+        )}
+        {players.length >= 2 && (
+          <button type="button" onClick={() => setTournamentOpen(true)} className={TOOL}>
+            <Trophy size={15} className="text-amber-500" /> Tournament
+          </button>
+        )}
+      </ChipRow>
+
       {!s.camp!.players_see_all_results && !s.isStaff && (
         <p className="mb-3 text-xs text-ink-soft">The camp admin has limited this view to your own matches.</p>
       )}
 
-      {/* Filter Bars */}
-      <div className="space-y-2 mb-4">
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="flex-1">
+      <div className="mb-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
             <Segmented
               value={filter}
               onChange={setFilter}
               options={[
-                { value: "all", label: "All Matches" },
-                { value: "mine", label: "My Matches" },
-                { value: "disputed", label: `Disputed${disputedCount ? ` (${disputedCount})` : ""}` },
+                { value: "all", label: "All" },
+                { value: "mine", label: "Mine" },
+                { value: "disputed", label: `Disputed${disputedCount ? ` · ${disputedCount}` : ""}` },
               ]}
             />
           </div>
-          <div className="relative w-full sm:w-48">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-soft" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search player…"
-              className="pl-8 !py-1 text-xs"
-            />
+          <button
+            type="button"
+            onClick={() => { setSearchOpen((o) => !o); if (searchOpen) setSearch(""); }}
+            aria-label={searchOpen ? "Close search" : "Search by player"}
+            aria-expanded={searchOpen}
+            className={cx(
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition",
+              searchOpen || search ? "bg-ink text-bg" : "bg-surface-3/60 text-ink-soft hover:text-ink",
+            )}
+          >
+            {searchOpen ? <X size={16} /> : <Search size={16} />}
+          </button>
+        </div>
+        {searchOpen && (
+          <div className="relative animate-fade-in">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
+            <Input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Player name" className="pl-9" />
           </div>
-        </div>
-
-        {/* Category Filters */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-          {["ALL", "MS", "WS", "MD", "WD", "XD"].map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => setCatFilter(cat)}
-              className={cx(
-                "px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-150 border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 active:scale-95",
-                catFilter === cat
-                  ? "bg-brand-pale text-brand border-brand-border shadow-xs font-black"
-                  : "bg-surface text-ink-soft border-line hover:border-brand-border hover:text-ink"
-              )}
-            >
-              {cat}
-            </button>
+        )}
+        <ChipRow>
+          {[["ALL", "All events"], ["MS", "Men's singles"], ["WS", "Women's singles"], ["MD", "Men's doubles"], ["WD", "Women's doubles"], ["XD", "Mixed"]].map(([cat, label]) => (
+            <Chip key={cat} active={catFilter === cat} onClick={() => setCatFilter(cat)}>{label}</Chip>
           ))}
-        </div>
+        </ChipRow>
       </div>
 
       {pending.length > 0 && (
@@ -287,15 +293,35 @@ export default function MatchesPage() {
       )}
 
       {matches.isLoading ? (
-        <p className="text-sm text-ink-soft">Loading…</p>
+        <div className="space-y-3">
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+        </div>
       ) : list.length === 0 ? (
-        <Empty>No matches yet. Tap Record after a game.</Empty>
+        <Empty>
+          {search || catFilter !== "ALL" || filter !== "all"
+            ? "No matches fit these filters."
+            : "No matches yet. Tap Record after a game."}
+        </Empty>
       ) : (
-        <div className="space-y-2">
-          {list.map((m) => (
-            <MatchCard key={m.id} match={m} people={people} meId={s.meId} isStaff={s.isStaff}
-              onEdit={setEditing} onDispute={(x) => { setReason(""); setDisputing(x); }} onResolve={handleResolveClick}
-              onRematch={players.length >= 2 ? rematch : undefined} />
+        <div className="space-y-6">
+          {days.map(({ day, items }) => (
+            <Section key={day} title={dayLabel(day)} action={<span className="font-medium text-ink-faint">{items.length}</span>}>
+              <Card className="divide-y divide-line overflow-hidden !p-0">
+                {items.map((m) => (
+                  <div
+                    key={m.id}
+                    id={`match-${m.id}`}
+                    className={cx("scroll-mt-24 transition-colors duration-700", highlight === m.id && "bg-brand-pale/70")}
+                  >
+                    <MatchCard flat hideDate match={m} people={people} meId={s.meId} isStaff={s.isStaff}
+                      onEdit={setEditing} onDispute={(x) => { setReason(""); setDisputing(x); }} onResolve={handleResolveClick}
+                      onRematch={players.length >= 2 ? rematch : undefined}
+                      onDeleteForever={s.isAdmin ? setDeletingForever : undefined} />
+                  </div>
+                ))}
+              </Card>
+            </Section>
           ))}
         </div>
       )}
@@ -401,10 +427,26 @@ export default function MatchesPage() {
       />
 
       <ConfirmDialog
+        open={!!deletingForever}
+        title="Delete this match for good?"
+        message="It's removed from the camp completely, along with its alerts. This can't be undone. (It's already voided, so standings don't change.)"
+        confirmLabel="Delete forever"
+        onConfirm={() => {
+          const target = deletingForever;
+          setDeletingForever(null);
+          if (target) mut.removeForever.mutate(target.id, {
+            onSuccess: () => toast.success("Match deleted"),
+            onError: (e) => toast.error(errorText(e)),
+          });
+        }}
+        onCancel={() => setDeletingForever(null)}
+      />
+
+      <ConfirmDialog
         open={!!deletingMatch}
-        title="Delete this match?"
-        message="This match will be voided and removed from camp standings. You can restore (undo) it at any time."
-        confirmLabel="Delete match"
+        title="Void this match?"
+        message="It stops counting in standings but stays in the list, so you can restore it. The camp admin can then delete it for good."
+        confirmLabel="Void match"
         cancelLabel="Cancel"
         tone="danger"
         onConfirm={handleConfirmDelete}
@@ -413,3 +455,6 @@ export default function MatchesPage() {
     </div>
   );
 }
+
+const TOOL =
+  "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface px-3.5 text-[13px] font-semibold text-ink shadow-card ring-1 ring-line transition hover:bg-surface-2 active:scale-95";

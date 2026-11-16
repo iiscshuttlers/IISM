@@ -23,18 +23,22 @@ export function PairingHelperModal({
   standings,
   attendanceMap,
   onSelectMatch,
+  renderTrigger,
 }: {
   players: Member[];
   matches: Match[];
   standings: Standing[];
   attendanceMap?: Record<string, "present" | "late" | "absent">;
   onSelectMatch: (category: Category, slots: (string | null)[]) => void;
+  /** Custom opener (e.g. a tile); defaults to a "Who plays next?" button. */
+  renderTrigger?: (open: () => void) => React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [selectedCat, setSelectedCat] = useState<Category>("MS");
   const [onlyAvailable, setOnlyAvailable] = useState(true);
 
-  const ratingMap = useMemo(() => new Map(standings.map((s) => [s.person_id, s.glicko ?? s.rating])), [standings]);
+  // The camp rating players see on Standings (not the separate confidence scale), so the numbers match.
+  const ratingMap = useMemo(() => new Map(standings.map((s) => [s.person_id, s.rating])), [standings]);
   const hist = useMemo(() => history(matches), [matches]);
 
   // Count matches played per person in this category
@@ -108,7 +112,7 @@ export function PairingHelperModal({
               totalPlayed === 0
                 ? "Both need first match"
                 : diff <= 30
-                ? `Closest rating (${diff} Elo gap)`
+                ? `Closest ratings (${diff} apart)`
                 : `Balanced court time (${playCounts.get(p1.id)} vs ${playCounts.get(p2.id)} played)`,
           });
         }
@@ -139,7 +143,7 @@ export function PairingHelperModal({
                 team1Rating: Math.round(t1Avg),
                 team2Rating: Math.round(t2Avg),
                 ratingDiff: diff,
-                reason: diff <= 25 ? `Evenly matched mixed pair (${diff} Elo diff)` : "Balanced playtime",
+                reason: diff <= 25 ? `Evenly matched (${diff} apart)` : "Balanced playtime",
               });
             }
           }
@@ -173,7 +177,7 @@ export function PairingHelperModal({
                 team1Rating: Math.round(t1Avg),
                 team2Rating: Math.round(t2Avg),
                 ratingDiff: diff,
-                reason: diff <= 30 ? `Closest doubles balance (${diff} Elo gap)` : "Least matches played",
+                reason: diff <= 30 ? `Closest doubles balance (${diff} apart)` : "Least matches played",
               });
             }
           }
@@ -219,15 +223,17 @@ export function PairingHelperModal({
 
   return (
     <>
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5"
-      >
-        <Sparkles size={15} className="text-amber-500" />
-        <span><span className="hidden sm:inline">Who plays next?</span><span className="sm:hidden">Pairings</span></span>
-      </Button>
+      {renderTrigger ? renderTrigger(() => setOpen(true)) : (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-1.5"
+        >
+          <Sparkles size={15} className="text-amber-500" />
+          <span><span className="hidden sm:inline">Who plays next?</span><span className="sm:hidden">Pairings</span></span>
+        </Button>
+      )}
 
       <Sheet open={open} onClose={() => setOpen(false)} title="Pairing Suggester & Fatigue Guard">
         <div className="space-y-4">
@@ -332,7 +338,7 @@ export function PairingHelperModal({
 
                   <div className="mt-3 pt-2 border-t border-line flex items-center justify-between gap-2">
                     <span className="text-xs text-ink-soft font-mono">
-                      Rating gap: <strong>{s.ratingDiff} Elo</strong> ({s.team1Rating} vs {s.team2Rating})
+                      Rating gap: <strong>{s.ratingDiff}</strong> ({s.team1Rating} vs {s.team2Rating})
                     </span>
                     <Button size="sm" onClick={() => handlePick(s)}>
                       <span>Record this</span>

@@ -46,6 +46,8 @@ const FRIENDLY: Record<string, string> = {
   cannot_remove_self: "You can't remove yourself.",
   cannot_demote_self: "You can't remove your own admin role.",
   invalid_day: "Check the date on this phone and try again.",
+  invalid_court_count: "Choose between 1 and 8 courts.",
+  void_first: "Void the match first; then it can be deleted for good.",
 };
 
 export function errorText(e: unknown): string {

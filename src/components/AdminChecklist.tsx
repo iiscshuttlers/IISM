@@ -24,7 +24,7 @@ export function setupSteps(camp: Pick<Camp, "starts_on" | "ends_on" | "selection
       done: players >= camp.selection_target, href: "/settings",
     },
     {
-      key: "coaches", title: "Add your coaches", hint: "Coaches record attendance, assess players and run selection.",
+      key: "coaches", title: "Add your coaches", hint: "Coaches record attendance, run sessions and assess players.",
       done: coaches > 0, href: "/settings",
     },
     {

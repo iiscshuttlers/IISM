@@ -94,8 +94,10 @@ export interface CourtAllocation {
   started_at: string;
 }
 
-/** Courts shown on the live board. A court with no allocation is open. */
-export const COURT_NUMBERS = [1, 2, 3, 4] as const;
+/** Courts shown on the live board: 1..count (default 4). A court with no allocation is open. */
+export const MAX_COURTS = 8;
+export const courtNumbers = (count: number | null | undefined) =>
+  Array.from({ length: Math.min(MAX_COURTS, Math.max(1, count ?? 4)) }, (_, i) => i + 1);
 
 export interface NextSessionFocus {
   camp_id: string;
@@ -412,6 +414,11 @@ export function useCourtMutations(campId: string) {
       mutationFn: async (courtNum: number) =>
         must(await supabase.from("court_allocations").delete().eq("camp_id", campId).eq("court_num", courtNum)),
       onSuccess: after,
+    }),
+    /** How many courts the camp uses (coaches and admin). Courts above it are freed. */
+    setCount: useMutation({
+      mutationFn: async (count: number) => must(await supabase.rpc("set_court_count", { p_camp: campId, p_count: count })),
+      onSuccess: () => inv("camps", "courts"),
     }),
   };
 }

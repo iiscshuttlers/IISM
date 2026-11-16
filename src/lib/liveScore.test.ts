@@ -23,9 +23,16 @@ const state: LiveScoreState = {
   gamesHistory: ["21-18"],
   winsA: 1,
   winsB: 0,
-  scoreLog: [{ a: 7, b: 8 }],
+  scoreLog: [
+    // The point that won set 1, so it can still be undone in set 2.
+    {
+      a: 20, b: 18, serve: { serving: "A", rightA: 1, rightB: 1 },
+      game: { currentGame: 1, gamesHistory: [], winsA: 0, winsB: 0, endsSwapped: false },
+    },
+    { a: 7, b: 8, serve: { serving: "B", rightA: 0, rightB: 0 } },
+  ],
   endsSwapped: true,
-  servingSide: "B",
+  serve: { serving: "B", rightA: 1, rightB: 0 },
 };
 
 describe("live scorer persistence", () => {
@@ -35,6 +42,16 @@ describe("live scorer persistence", () => {
   it("restores a match in progress exactly as it was", () => {
     saveLiveScore(state, 1_000);
     expect(loadLiveScore(2_000)).toEqual(state);
+  });
+
+  it("carries on a match saved before serving was tracked player by player", () => {
+    const { serve: _serve, ...rest } = state;
+    const legacy = { ...rest, scoreLog: [{ a: 7, b: 8 }], servingSide: "B", savedAt: 1_000 };
+    localStorage.setItem("live-scorer.v1", JSON.stringify(legacy));
+    const loaded = loadLiveScore(2_000);
+    expect(loaded?.serve).toEqual({ serving: "B", rightA: 0, rightB: 0 });
+    expect(loaded?.scoreLog).toEqual([{ a: 7, b: 8 }]);
+    expect(loaded).not.toHaveProperty("servingSide");
   });
 
   it("drops a match older than 12 hours", () => {

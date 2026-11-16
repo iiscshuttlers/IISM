@@ -1,4 +1,23 @@
 import type { Category } from "./scores";
+import { INITIAL_SERVE, isServeState, type ServeState } from "./serving";
+
+/** The score before a scoring action, so it can be undone (with who was serving, and where). */
+export interface ScoreLogEntry {
+  a: number;
+  b: number;
+  /** Missing on entries saved before serving was tracked. */
+  serve?: ServeState;
+  /** On the point that won a game: the match as it stood before it, so that point can be undone. */
+  game?: GameStanding;
+}
+
+export interface GameStanding {
+  currentGame: number;
+  gamesHistory: string[];
+  winsA: number;
+  winsB: number;
+  endsSwapped: boolean;
+}
 
 /**
  * The live scorer's match in progress, kept on this phone so a refresh, a locked screen or a
@@ -20,9 +39,9 @@ export interface LiveScoreState {
   gamesHistory: string[];
   winsA: number;
   winsB: number;
-  scoreLog: { a: number; b: number }[];
+  scoreLog: ScoreLogEntry[];
   endsSwapped: boolean;
-  servingSide: "A" | "B";
+  serve: ServeState;
 }
 
 const KEY = "live-scorer.v1";
@@ -32,7 +51,11 @@ export function loadLiveScore(now = Date.now()): LiveScoreState | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
-    const { savedAt, ...s } = JSON.parse(raw) as LiveScoreState & { savedAt: number };
+    // `servingSide` is how matches saved before player-by-player serving recorded the server.
+    const { savedAt, servingSide, ...s } = JSON.parse(raw) as LiveScoreState & {
+      savedAt: number;
+      servingSide?: unknown;
+    };
     const valid =
       (s.step === "scoring" || s.step === "finished") &&
       Array.isArray(s.slots) && Array.isArray(s.gamesHistory) && Array.isArray(s.scoreLog) &&
@@ -41,7 +64,10 @@ export function loadLiveScore(now = Date.now()): LiveScoreState | null {
       clearLiveScore();
       return null;
     }
-    return s;
+    const serve = isServeState(s.serve)
+      ? s.serve
+      : { ...INITIAL_SERVE, serving: servingSide === "B" ? ("B" as const) : ("A" as const) };
+    return { ...s, serve };
   } catch {
     return null;
   }

@@ -23,7 +23,9 @@ interface Ctx {
   signOut: () => Promise<void>;
 }
 
-const SessionContext = createContext<Ctx | null>(null);
+/** Exported so previews and tests can supply a session without signing in. */
+export type SessionCtx = Ctx;
+export const SessionContext = createContext<Ctx | null>(null);
 const CAMP_KEY = "camp.selected";
 /** localStorage key of the persisted React Query cache (see main.tsx). */
 export const CACHE_KEY = "camp.cache.v1";

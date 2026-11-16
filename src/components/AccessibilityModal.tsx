@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Eye, Sun, Sparkles, SlidersHorizontal } from "lucide-react";
+import { Eye, Sun, Sparkles, SlidersHorizontal, Vibrate } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Card, Sheet, Segmented, Toggle } from "./ui";
 import { getA11yPrefs, saveA11yPrefs, type AccessibilityPrefs } from "../lib/campExtended";
+import { hapticsEnabled, setHapticsEnabled } from "../lib/haptics";
 
 export function AccessibilityModal({
   open,
@@ -12,6 +13,7 @@ export function AccessibilityModal({
   onClose: () => void;
 }) {
   const [prefs, setPrefs] = useState<AccessibilityPrefs>(getA11yPrefs);
+  const [haptics, setHaptics] = useState(hapticsEnabled);
 
   useEffect(() => {
     if (open) {
@@ -81,6 +83,25 @@ export function AccessibilityModal({
             label="Minimize animations"
             checked={prefs.reducedMotion}
             onChange={(val) => update({ reducedMotion: val })}
+          />
+        </Card>
+
+        {/* Haptics (this phone only) */}
+        <Card className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Vibrate size={16} className="text-brand" />
+            <h4 className="text-xs font-bold text-ink">Vibration</h4>
+          </div>
+          <p className="text-[11px] text-ink-soft">
+            A light tick when you tap, and a short buzz when something saves or fails. iPhones need iOS 18 or later.
+          </p>
+          <Toggle
+            label="Vibrate on taps and results"
+            checked={haptics}
+            onChange={(val) => {
+              setHapticsEnabled(val);
+              setHaptics(val);
+            }}
           />
         </Card>
 

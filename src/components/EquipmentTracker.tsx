@@ -206,7 +206,7 @@ export function EquipmentTrackerModal({
         )}
 
         {/* Filter categories */}
-        <div className="flex gap-1.5 overflow-x-auto pb-1 text-xs">
+        <div className="flex flex-wrap gap-1.5 text-xs">
           {["all", "shuttles", "rackets", "training_aids", "medical"].map((cat) => (
             <button
               key={cat}

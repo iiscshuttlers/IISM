@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { CloudSun, Wind, AlertCircle, Edit2, CheckCircle, MapPin } from "lucide-react";
 import { toast } from "sonner";
-import { Badge, Button, Card, Sheet } from "./ui";
+import { Badge, Button, Sheet, cx } from "./ui";
 import { useMembers } from "../lib/api";
 import { errorText } from "../lib/supabase";
 import { useSaveVenuePlan, useVenuePlan, type VenuePlan } from "../lib/sharedData";
@@ -16,9 +16,12 @@ const PLAN_LABEL: Record<VenuePlan["plan_type"], string> = {
 export function WeatherVenueBanner({
   campId,
   isStaff,
+  flat = false,
 }: {
   campId: string;
   isStaff?: boolean;
+  /** A row inside another card instead of a card of its own. */
+  flat?: boolean;
 }) {
   const planQ = useVenuePlan(campId);
   const members = useMembers(campId);
@@ -32,7 +35,7 @@ export function WeatherVenueBanner({
     if (!isStaff) return null;
     return (
       <>
-        <Card className="flex items-center justify-between gap-3 border-dashed bg-surface-2/40 p-3">
+        <div className={cx("flex items-center justify-between gap-3", flat ? "px-4 py-3" : "rounded-2xl bg-surface-2/70 p-3")}>
           <div className="flex items-center gap-2.5 min-w-0">
             <MapPin size={16} className="shrink-0 text-ink-soft" />
             <p className="text-xs text-ink-soft">No venue or conditions notice for players yet.</p>
@@ -40,7 +43,7 @@ export function WeatherVenueBanner({
           <Button size="sm" variant="secondary" onClick={() => setEditOpen(true)} className="shrink-0 text-xs">
             Post notice
           </Button>
-        </Card>
+        </div>
         <WeatherPlanEditModal open={editOpen} onClose={() => setEditOpen(false)} campId={campId} currentPlan={null} />
       </>
     );
@@ -53,17 +56,15 @@ export function WeatherVenueBanner({
 
   return (
     <>
-      <Card
-        className={`border transition-colors ${
-          isRelocated
-            ? "bg-amber-500/5 border-amber-500/30"
-            : isHeatWarning
-            ? "bg-status-danger-bg/20 border-status-danger-border"
-            : "bg-surface-2/70 border-line"
-        }`}
+      <div
+        className={cx(
+          flat ? "px-4 py-3" : "rounded-2xl p-4 shadow-card ring-1 ring-line/70",
+          isRelocated ? "bg-status-warn-bg/60" : isHeatWarning ? "bg-status-danger-bg/60" : flat ? "" : "bg-surface",
+        )}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-2.5">
+        {/* The Change button drops under the details on narrow phones. */}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-1 basis-56 items-start gap-2.5">
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
                 isRelocated
@@ -76,11 +77,11 @@ export function WeatherVenueBanner({
               {isRelocated || isHeatWarning ? <AlertCircle size={16} /> : <CloudSun size={16} />}
             </div>
 
-            <div className="space-y-1">
+            <div className="min-w-0 space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge tone={tone}>{PLAN_LABEL[plan.plan_type]}</Badge>
                 <span className="font-bold text-xs text-ink">{plan.venue_name}</span>
-                <span className="text-[11px] text-ink-soft font-mono flex items-center gap-1">
+                <span className="flex items-center gap-1 whitespace-nowrap text-[11px] text-ink-soft">
                   <Wind size={11} /> Shuttle: <strong>{plan.shuttle_speed}</strong>
                 </span>
               </div>
@@ -88,12 +89,7 @@ export function WeatherVenueBanner({
               {plan.athlete_notice && <p className="text-xs text-ink font-medium">{plan.athlete_notice}</p>}
 
               <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-ink-soft">
-                {plan.weather_summary && (
-                  <>
-                    <span>{plan.weather_summary}</span>
-                    <span>·</span>
-                  </>
-                )}
+                {plan.weather_summary && <span>{plan.weather_summary}</span>}
                 <span>Set by {setBy}</span>
               </div>
             </div>
@@ -104,7 +100,7 @@ export function WeatherVenueBanner({
               size="sm"
               variant="secondary"
               onClick={() => setEditOpen(true)}
-              className="text-xs shrink-0"
+              className="ml-auto shrink-0 text-xs"
               title="Update venue & weather plan"
             >
               <Edit2 size={12} className="mr-1" />
@@ -112,7 +108,7 @@ export function WeatherVenueBanner({
             </Button>
           )}
         </div>
-      </Card>
+      </div>
 
       {isStaff && (
         <WeatherPlanEditModal

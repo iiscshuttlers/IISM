@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import {
-  CheckCheck, CheckCircle2, Circle, Plus, Sparkles, Trash2, Timer,
+  CheckCheck, CheckCircle2, ChevronRight, Circle, Dumbbell, Plus, Sparkles, Trash2, Timer,
   PenTool, Package, BookOpen, Calendar, MessageSquare, RotateCcw, Wrench
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
 import { useAttendance, useDrills, useMembers, useSessions, useTrainingMutations } from "../lib/api";
 import { errorText } from "../lib/supabase";
-import { Badge, Button, Card, ConfirmDialog, Empty, Field, Input, PageTitle, Select, Sheet, Textarea, cx, fmtDate, today } from "../components/ui";
+import { Badge, Button, Card, ConfirmDialog, Empty, Field, Input, PageTitle, Section, Select, Sheet, Skeleton, Textarea, cx, dayLabel, fmtDate, today } from "../components/ui";
 import { DrillTemplatesSheet, type DrillTemplate } from "../components/DrillTemplates";
 import { DrillTimerModal } from "../components/DrillTimer";
 import { TacticalBoardModal } from "../components/TacticalBoard";
@@ -36,58 +36,74 @@ export default function TrainingPage() {
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [reflectionOpen, setReflectionOpen] = useState(false);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("session"));
   const [toolsOpen, setToolsOpen] = useState(false);
   const open = (sessions.data ?? []).find((x) => x.id === openId) ?? null;
 
   const players = (members.data ?? []).filter((m) => m.role === "player");
+  const sessionList = sessions.data ?? [];
+  const totalMinutes = (drills.data ?? []).reduce((t, y) => t + (y.duration_min ?? 0), 0);
+  const byDay: { day: string; items: Session[] }[] = [];
+  for (const x of sessionList) {
+    const last = byDay[byDay.length - 1];
+    if (last && last.day === x.session_date) last.items.push(x);
+    else byDay.push({ day: x.session_date, items: [x] });
+  }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <PageTitle
+        sub={sessionList.length ? `${sessionList.length} session${sessionList.length === 1 ? "" : "s"} · ${totalMinutes} min of drills` : undefined}
         action={
-          <div className="flex items-center gap-1.5">
-            <Button variant="secondary" size="sm" onClick={() => setToolsOpen(true)}>
-              <Wrench size={14} className="text-brand" /> Tools
+          <>
+            <Button variant="secondary" onClick={() => setToolsOpen(true)} aria-label="Training tools">
+              <Wrench size={16} className="text-brand" /> <span className="hidden sm:inline">Tools</span>
             </Button>
-            <Button size="sm" onClick={() => setAdding(true)}>
+            <Button onClick={() => setAdding(true)}>
               <Plus size={16} /> Session
             </Button>
-          </div>
+          </>
         }
       >
         Training log
       </PageTitle>
 
-      {/* Weather & Venue-Aware Planning Banner */}
       <WeatherVenueBanner campId={campId} isStaff={s.isStaff} />
+
       {sessions.isLoading ? (
-        <p className="text-sm text-ink-soft">Loading…</p>
-      ) : (sessions.data ?? []).length === 0 ? (
+        <div className="space-y-2"><Skeleton className="h-20" /><Skeleton className="h-20" /></div>
+      ) : sessionList.length === 0 ? (
         <Empty>No sessions yet. Log today's training: drills, attendance and how hard it felt.</Empty>
       ) : (
-        <div className="space-y-2">
-          {(sessions.data ?? []).map((x) => {
-            const d = (drills.data ?? []).filter((y) => y.session_id === x.id);
-            const a = (attendance.data ?? []).filter((y) => y.session_id === x.id);
-            const present = a.filter((y) => y.status !== "absent").length;
-            const minutes = d.reduce((t, y) => t + (y.duration_min ?? 0), 0);
-            return (
-              <button key={x.id} onClick={() => setOpenId(x.id)} className="block w-full text-left">
-                <Card className="hover:border-brand/50">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <p className="font-semibold">{x.title}</p>
-                    <span className="text-xs text-ink-soft">{fmtDate(x.session_date)}</span>
-                  </div>
-                  {x.focus && <p className="text-sm text-ink-soft">{x.focus}</p>}
-                  <p className="mt-1 text-xs text-ink-soft">
-                    {d.length} drill{d.length === 1 ? "" : "s"}{minutes ? ` · ${minutes} min` : ""} · {present} present
-                  </p>
-                </Card>
-              </button>
-            );
-          })}
-        </div>
+        byDay.map(({ day, items }) => (
+          <Section key={day} title={dayLabel(day)}>
+            <Card className="divide-y divide-line overflow-hidden !p-0">
+              {items.map((x) => {
+                const d = (drills.data ?? []).filter((y) => y.session_id === x.id);
+                const a = (attendance.data ?? []).filter((y) => y.session_id === x.id);
+                const present = a.filter((y) => y.status !== "absent").length;
+                const minutes = d.reduce((t, y) => t + (y.duration_min ?? 0), 0);
+                return (
+                  <button key={x.id} type="button" onClick={() => setOpenId(x.id)}
+                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-surface-2/60">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-pale text-brand">
+                      <Dumbbell size={18} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold text-ink">{x.title}</span>
+                      {x.focus && <span className="block truncate text-sm text-ink-soft">{x.focus}</span>}
+                      <span className="mt-1 flex flex-wrap gap-x-3 text-xs text-ink-faint">
+                        <span>{d.length} drill{d.length === 1 ? "" : "s"}{minutes ? ` · ${minutes} min` : ""}</span>
+                        <span>{present} present</span>
+                      </span>
+                    </span>
+                    <ChevronRight size={16} className="shrink-0 text-ink-faint" />
+                  </button>
+                );
+              })}
+            </Card>
+          </Section>
+        ))
       )}
 
       <Sheet open={adding} onClose={() => setAdding(false)} title="New session">
@@ -492,10 +508,10 @@ function SessionDetail({ session, drills, attendance, players, canDelete, mut, o
         {canDelete && <div className="mt-3 p-3 bg-surface-2 rounded-lg border border-line flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold text-ink">Ready to evaluate player performance?</p>
-            <p className="text-[11px] text-ink-soft">Record technique, fitness, tactics &amp; attitude scores for selection.</p>
+            <p className="text-[11px] text-ink-soft">Record technique, fitness, tactics &amp; attitude scores.</p>
           </div>
-          <Link href="/selection">
-            <Button size="sm" variant="secondary">Assess squad →</Button>
+          <Link href="/players">
+            <Button size="sm" variant="secondary">Assess players →</Button>
           </Link>
         </div>}
       </section>

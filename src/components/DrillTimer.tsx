@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Play, Pause, RotateCcw, Volume2, VolumeX } from "lucide-react";
 import { Button, Card, Sheet } from "./ui";
+import { hapticsEnabled } from "../lib/haptics";
 
 function playBeep(freq = 880, duration = 0.15) {
   try {
@@ -50,7 +51,8 @@ function playWhistle() {
     osc1.stop(ctx.currentTime + 0.35);
     osc2.stop(ctx.currentTime + 0.35);
 
-    if (typeof navigator !== "undefined" && navigator.vibrate) {
+    // Time's up: a long buzz, unless this phone has vibration turned off.
+    if (hapticsEnabled() && typeof navigator !== "undefined" && navigator.vibrate) {
       navigator.vibrate([150, 50, 200]);
     }
   } catch {

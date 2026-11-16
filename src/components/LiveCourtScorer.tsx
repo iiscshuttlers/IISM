@@ -5,7 +5,12 @@ import { Avatar, Button, Card, ConfirmDialog, Field, Select, Sheet, cx, today } 
 import { CATEGORIES, isSingles, slotGenders, type Category } from "../lib/scores";
 import type { Member } from "../lib/types";
 import type { MatchInput } from "../lib/api";
-import { clearLiveScore, loadLiveScore, saveLiveScore } from "../lib/liveScore";
+import { clearLiveScore, loadLiveScore, saveLiveScore, type ScoreLogEntry } from "../lib/liveScore";
+import { haptic } from "../lib/haptics";
+import {
+  INITIAL_SERVE, afterPointRemoved, afterRally, choosePlayer, courtOf, nextServe, otherSide,
+  type PlayerIndex, type ServeState, type Side,
+} from "../lib/serving";
 
 export function LiveCourtScorer({
   open,
@@ -39,12 +44,13 @@ export function LiveCourtScorer({
   const [gamesHistory, setGamesHistory] = useState<string[]>(saved?.gamesHistory ?? []);
   const [winsA, setWinsA] = useState(saved?.winsA ?? 0);
   const [winsB, setWinsB] = useState(saved?.winsB ?? 0);
-  const [scoreLog, setScoreLog] = useState<{ a: number; b: number }[]>(saved?.scoreLog ?? []);
+  const [scoreLog, setScoreLog] = useState<ScoreLogEntry[]>(saved?.scoreLog ?? []);
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmFinish, setConfirmFinish] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [endsSwapped, setEndsSwapped] = useState(saved?.endsSwapped ?? false);
-  const [servingSide, setServingSide] = useState<"A" | "B">(saved?.servingSide ?? "A");
+  // Which side serves, and in doubles where each player stands, so the server can be named.
+  const [serve, setServe] = useState<ServeState>(saved?.serve ?? INITIAL_SERVE);
 
   useEffect(() => {
     if (step === "setup") {
@@ -53,25 +59,16 @@ export function LiveCourtScorer({
     }
     saveLiveScore({
       step, category, targetPoints, isCustomPoints, enableDeuce, matchFormat, slots, playedOn,
-      currentGame, scoreA, scoreB, gamesHistory, winsA, winsB, scoreLog, endsSwapped, servingSide,
+      currentGame, scoreA, scoreB, gamesHistory, winsA, winsB, scoreLog, endsSwapped, serve,
     });
   }, [step, category, targetPoints, isCustomPoints, enableDeuce, matchFormat, slots, playedOn,
-    currentGame, scoreA, scoreB, gamesHistory, winsA, winsB, scoreLog, endsSwapped, servingSide]);
+    currentGame, scoreA, scoreB, gamesHistory, winsA, winsB, scoreLog, endsSwapped, serve]);
 
   const close = () => {
     if (step === "scoring") toast.info("Match paused. Open the scorer again to carry on.");
     onClose();
   };
 
-  const vibrate = (pattern: number | number[] = 35) => {
-    try {
-      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
-        navigator.vibrate(pattern);
-      }
-    } catch {
-      // Ignore vibration error on unsupported platforms
-    }
-  };
 
   const setsToWin = matchFormat === "1_set" ? 1 : matchFormat === "best_of_5" ? 3 : 2;
   const deuceAt = enableDeuce ? targetPoints - 1 : targetPoints;
@@ -92,6 +89,7 @@ export function LiveCourtScorer({
     players.filter((p) => (!want[i] || !p.gender || p.gender === want[i]) && (slots[i] === p.id || !slots.includes(p.id)));
 
   const nameOf = (id: string | null) => players.find((p) => p.id === id)?.full_name ?? "—";
+  const playerId = (side: Side, i: PlayerIndex) => slots[(side === "A" ? 0 : 2) + i] ?? null;
   const team1Name = singles ? nameOf(slots[0]) : `${nameOf(slots[0])} & ${nameOf(slots[1])}`;
   const team2Name = singles ? nameOf(slots[2]) : `${nameOf(slots[2])} & ${nameOf(slots[3])}`;
 
@@ -110,15 +108,13 @@ export function LiveCourtScorer({
     setScoreLog([]);
     setCurrentGame(1);
     setEndsSwapped(false);
-    setServingSide("A");
+    setServe(INITIAL_SERVE);
     setPlayedOn(today());
     setStep("scoring");
   };
 
-  const addPoint = (side: "A" | "B") => {
-    vibrate(35);
-    setServingSide(side);
-    setScoreLog((prev) => [...prev, { a: scoreA, b: scoreB }]);
+  const addPoint = (side: Side) => {
+    setServe(afterRally(serve, side));
     const nextA = side === "A" ? scoreA + 1 : scoreA;
     const nextB = side === "B" ? scoreB + 1 : scoreB;
 
@@ -133,8 +129,12 @@ export function LiveCourtScorer({
         nextB >= cap
       : nextA >= targetPoints || nextB >= targetPoints;
 
+    // The history runs across games, so even the point that won a game (or the match) can be undone.
+    const entry: ScoreLogEntry = { a: scoreA, b: scoreB, serve };
+    if (isGameWon) entry.game = { currentGame, gamesHistory, winsA, winsB, endsSwapped };
+    setScoreLog((prev) => [...prev, entry]);
+
     if (isGameWon) {
-      vibrate([60, 50, 80]);
       const winnerSide = nextA > nextB ? "A" : "B";
       const finalGameScore = `${nextA}-${nextB}`;
       const nextGames = [...gamesHistory, finalGameScore];
@@ -151,7 +151,7 @@ export function LiveCourtScorer({
 
       // Check if match won
       if (nextWinsA === setsToWin || nextWinsB === setsToWin) {
-        vibrate([100, 80, 150]);
+        haptic("success");
         setStep("finished");
       } else {
         // Next set - automatically switch ends as per standard rules
@@ -159,30 +159,44 @@ export function LiveCourtScorer({
         setCurrentGame((g) => g + 1);
         setScoreA(0);
         setScoreB(0);
-        setScoreLog([]);
       }
     }
   };
 
-  const subPoint = (side: "A" | "B") => {
-    vibrate(25);
-    if (side === "A" && scoreA > 0) {
-      setScoreLog((prev) => [...prev, { a: scoreA, b: scoreB }]);
-      setScoreA((a) => a - 1);
-    } else if (side === "B" && scoreB > 0) {
-      setScoreLog((prev) => [...prev, { a: scoreA, b: scoreB }]);
-      setScoreB((b) => b - 1);
-    }
+  const subPoint = (side: Side) => {
+    const before = side === "A" ? { a: scoreA - 1, b: scoreB } : { a: scoreA, b: scoreB - 1 };
+    if (before.a < 0 || before.b < 0) return;
+    // Taking back the point just scored, when that rally won this side the serve: hand it back.
+    const last = scoreLog[scoreLog.length - 1];
+    const servedBack = !!last?.serve && last.a === before.a && last.b === before.b && last.serve.serving !== side;
+    setServe(afterPointRemoved(serve, side, servedBack));
+    setScoreLog((prev) => [...prev, { a: scoreA, b: scoreB, serve }]);
+    setScoreA(before.a);
+    setScoreB(before.b);
   };
 
   const undoPoint = () => {
     if (scoreLog.length === 0) return;
-    vibrate(25);
     const last = scoreLog[scoreLog.length - 1];
     setScoreA(last.a);
     setScoreB(last.b);
+    if (last.serve) setServe(last.serve);
+    if (last.game) {
+      // Taking back the point that won a game: reopen that game, and the match if it ended there.
+      setCurrentGame(last.game.currentGame);
+      setGamesHistory(last.game.gamesHistory);
+      setWinsA(last.game.winsA);
+      setWinsB(last.game.winsB);
+      setEndsSwapped(last.game.endsSwapped);
+      setStep("scoring");
+      toast.info(`Set ${last.game.currentGame} reopened at ${last.a}–${last.b}`);
+    }
     setScoreLog((prev) => prev.slice(0, -1));
   };
+
+  /** Tapping a player makes them the server (their side is serving) or the receiver. */
+  const pickPlayer = (side: Side, player: PlayerIndex) =>
+    setServe((s) => choosePlayer(s, scoreA, scoreB, side, player));
 
   const saveLiveMatch = async () => {
     const winnerSide = winsA > winsB ? 1 : 2;
@@ -417,6 +431,11 @@ export function LiveCourtScorer({
           const isGamePoint = isGamePointA || isGamePointB;
           const hasBanner = isDeuce || isGamePointA || isGamePointB;
 
+          const next = nextServe(serve, scoreA, scoreB);
+          const serverName = nameOf(playerId(serve.serving, singles ? 0 : next.server));
+          const receiverName = nameOf(playerId(otherSide(serve.serving), singles ? 0 : next.receiver));
+          const gameStart = scoreA === 0 && scoreB === 0;
+
           return (
             <div className="space-y-4">
               {/* Game Status Header */}
@@ -440,7 +459,6 @@ export function LiveCourtScorer({
                   <button
                     type="button"
                     onClick={() => {
-                      vibrate(30);
                       setEndsSwapped((prev) => !prev);
                       toast.success("Court ends switched");
                     }}
@@ -513,6 +531,23 @@ export function LiveCourtScorer({
                   </div>
                 )}
 
+                {/* Who serves to whom, and from which service court */}
+                <div className="mb-3 text-center" aria-live="polite">
+                  <p className="text-xs sm:text-sm text-emerald-100">
+                    <span aria-hidden>🏸 </span>
+                    <strong className="font-black text-white">{serverName}</strong> serves to{" "}
+                    <strong className="font-black text-white">{receiverName}</strong>
+                    <span className="text-emerald-300/90"> · from the {next.court} court</span>
+                  </p>
+                  {gameStart && (
+                    <p className="mt-0.5 text-[11px] text-emerald-300/70">
+                      {singles
+                        ? "Tap Serving or Receiving to change who serves first."
+                        : "Tap a name to choose who serves and who receives first."}
+                    </p>
+                  )}
+                </div>
+
                 {/* Court with Vertical Net Divider */}
                 <div className="relative grid grid-cols-2 gap-3 sm:gap-6 items-center">
                   {/* Vertical Net Divider */}
@@ -524,35 +559,69 @@ export function LiveCourtScorer({
                   </div>
 
                   {/* Render sides according to court ends */}
-                  {[endsSwapped ? "B" : "A", endsSwapped ? "A" : "B"].map((side) => {
+                  {([endsSwapped ? "B" : "A", endsSwapped ? "A" : "B"] as const).map((side) => {
                     const isA = side === "A";
                     const teamName = isA ? team1Name : team2Name;
                     const score = isA ? scoreA : scoreB;
-                    const isServing = servingSide === side;
-                    const p1 = isA ? slots[0] : slots[2];
-                    const p2 = isA ? slots[1] : slots[3];
+                    const isServing = serve.serving === side;
 
                     return (
                       <div key={side} className="text-center space-y-2 z-0">
                         <div className="flex flex-col items-center justify-center gap-1 min-h-[42px]">
-                          <div className="flex items-center justify-center gap-1.5 max-w-full px-1">
-                            {p1 && <Avatar name={nameOf(p1)} size="xs" />}
-                            {p2 && !singles && <Avatar name={nameOf(p2)} size="xs" />}
-                            <p className="font-bold text-xs sm:text-sm truncate text-emerald-100">{teamName}</p>
-                          </div>
+                          {singles ? (
+                            <div className="flex items-center justify-center gap-1.5 max-w-full px-1">
+                              {playerId(side, 0) && <Avatar name={teamName} size="xs" />}
+                              <p className="font-bold text-xs sm:text-sm truncate text-emerald-100">{teamName}</p>
+                            </div>
+                          ) : (
+                            <div className="w-full space-y-1">
+                              {([0, 1] as const).map((i) => {
+                                const name = nameOf(playerId(side, i));
+                                const court = courtOf(serve, side, i);
+                                const role = isServing
+                                  ? next.server === i && "serving"
+                                  : next.receiver === i && "receiving";
+                                return (
+                                  <button
+                                    key={i}
+                                    type="button"
+                                    onClick={() => pickPlayer(side, i)}
+                                    data-haptic="select"
+                                    aria-pressed={!!role}
+                                    aria-label={`${name}, ${court} court${role ? `, ${role}` : ""}. Tap to make ${name} the ${isServing ? "server" : "receiver"}.`}
+                                    title={`Make ${name} the ${isServing ? "server" : "receiver"}`}
+                                    className={cx(
+                                      "w-full flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-left transition cursor-pointer active:scale-[0.98]",
+                                      role === "serving"
+                                        ? "bg-amber-400 text-amber-950 shadow"
+                                        : role === "receiving"
+                                        ? "bg-emerald-950/70 text-white ring-1 ring-emerald-200/70"
+                                        : "text-emerald-100/70 hover:bg-emerald-900/60"
+                                    )}
+                                  >
+                                    <Avatar name={name} size="xs" />
+                                    <span className="min-w-0 flex-1 truncate text-xs sm:text-sm font-bold">
+                                      {role === "serving" && <span aria-hidden>🏸 </span>}
+                                      {name}
+                                    </span>
+                                    <span className="shrink-0 text-[9px] font-black uppercase tracking-wider opacity-70">
+                                      {court}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                           <button
                             type="button"
-                            onClick={() => {
-                              vibrate(20);
-                              setServingSide(isA ? "B" : "A");
-                            }}
+                            onClick={() => setServe((s) => ({ ...s, serving: otherSide(s.serving) }))}
                             className={cx(
                               "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition cursor-pointer shadow-xs",
                               isServing
                                 ? "bg-amber-400 text-amber-950 animate-pulse font-black"
                                 : "bg-emerald-950/60 text-emerald-300/70 hover:bg-emerald-900 border border-emerald-600/30"
                             )}
-                            title="Click to toggle server"
+                            title={isServing ? `Give the serve to the other side` : `Give the serve to ${teamName}`}
                           >
                             🏸 {isServing ? "Serving" : "Receiving"}
                           </button>
@@ -560,7 +629,8 @@ export function LiveCourtScorer({
 
                         <button
                           type="button"
-                          onClick={() => addPoint(side as "A" | "B")}
+                          onClick={() => addPoint(side)}
+                          data-haptic="impact"
                           title={`Tap to add point to ${teamName}`}
                           className="w-full text-5xl sm:text-6xl font-black tabular-nums tracking-tight font-mono py-3 sm:py-4 bg-emerald-900/70 hover:bg-emerald-900 rounded-xl border border-emerald-500/40 active:scale-95 transition cursor-pointer"
                         >
@@ -570,7 +640,7 @@ export function LiveCourtScorer({
                           <button
                             type="button"
                             disabled={score === 0}
-                            onClick={() => subPoint(side as "A" | "B")}
+                            onClick={() => subPoint(side)}
                             title={`Subtract 1 point from ${teamName}`}
                             aria-label={`Subtract 1 point from ${teamName}`}
                             className="px-2.5 sm:px-3.5 py-2.5 sm:py-3 rounded-xl bg-emerald-950/70 hover:bg-emerald-950 border border-emerald-600/50 text-emerald-200 font-black text-sm shadow active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
@@ -579,7 +649,8 @@ export function LiveCourtScorer({
                           </button>
                           <button
                             type="button"
-                            onClick={() => addPoint(side as "A" | "B")}
+                            onClick={() => addPoint(side)}
+                            data-haptic="impact"
                             className="flex-1 py-2.5 sm:py-3 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-sm sm:text-base shadow active:scale-95 transition cursor-pointer"
                           >
                             +1 Point
@@ -647,6 +718,14 @@ export function LiveCourtScorer({
                 <Check size={16} className="mr-1.5" />
                 {busy ? "Saving match…" : "Save to Camp Standings"}
               </Button>
+
+              {/* Won on a point (not finished early): that point can be taken back. */}
+              {scoreLog[scoreLog.length - 1]?.game && (winsA === setsToWin || winsB === setsToWin) && (
+                <Button variant="ghost" size="sm" onClick={undoPoint} disabled={busy}>
+                  <RotateCcw size={14} className="mr-1.5" />
+                  Undo last point
+                </Button>
+              )}
 
               <Button variant="ghost" size="sm" onClick={() => setConfirmDiscard(true)}>
                 Discard

@@ -18,7 +18,8 @@ const spaFallback = (): Plugin => ({
 export default defineConfig({
   // GitHub Pages serves the site under /<repo>/; the deploy workflow sets BASE_PATH.
   base: process.env.BASE_PATH || "/",
-  server: { port: 5199 },
+  // Agent worktrees live in .claude/; their builds must not reload this dev server.
+  server: { port: 5199, watch: { ignored: ["**/.claude/**"] } },
   plugins: [
     react(),
     tailwindcss(),

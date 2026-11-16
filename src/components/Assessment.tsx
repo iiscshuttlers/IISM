@@ -93,7 +93,7 @@ export function AssessmentForm({ history, busy, onSubmit }: {
   );
 }
 
-/** Assess one player from anywhere (selection board, player details). Staff only. */
+/** Assess one player from anywhere (Players page, player details). Staff only. */
 export function AssessSheet({ campId, person, history, onClose }: {
   campId: string;
   person: { id: string; full_name: string } | null;

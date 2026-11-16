@@ -1,10 +1,12 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { AlertTriangle, CheckCircle2, ClipboardCheck, Flame, HeartPulse } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardCheck, Flame, HeartPulse, ListChecks } from "lucide-react";
 import { Card, cx } from "./ui";
+import { useRosterAdmin } from "../lib/api";
 import { useInjuryReports } from "../lib/sharedData";
 import { rpeIsDue, useNow } from "../lib/today";
-import type { Assessment, Attendance, Match, Member } from "../lib/types";
+import { setupSteps } from "./AdminChecklist";
+import type { Assessment, Attendance, Camp, Match, Member } from "../lib/types";
 
 /** Days without an assessment before a player shows up as due. */
 export const ASSESS_EVERY_DAYS = 7;
@@ -26,9 +28,12 @@ export function playersDueAssessment(players: Member[], assessments: Pick<Assess
  * there's nothing to do, so an empty card means everything is handled.
  */
 export function CoachAttention({
-  campId, players, matches, assessments, todayAttendance, sessionMinutes, onOpenPlayer, onOpenInjuries,
+  campId, players, matches, assessments, todayAttendance, sessionMinutes, onOpenPlayer, onOpenInjuries, camp, isAdmin = false,
 }: {
   campId: string;
+  /** With isAdmin: shows camp setup progress until it's done (or hidden). */
+  camp?: Camp;
+  isAdmin?: boolean;
   players: Member[];
   matches: Match[];
   assessments: Pick<Assessment, "person_id" | "assessed_on">[];
@@ -40,6 +45,11 @@ export function CoachAttention({
 }) {
   const now = useNow();
   const injuries = useInjuryReports(campId);
+  const roster = useRosterAdmin(campId, isAdmin);
+  const hideKey = `setup.hidden.${campId}`;
+  const [setupHidden, setSetupHidden] = useState(() => {
+    try { return localStorage.getItem(hideKey) === "1"; } catch { return false; }
+  });
   const playerIds = new Set(players.map((p) => p.id));
   const nameOf = (id: string) => players.find((p) => p.id === id)?.full_name ?? "Player";
 
@@ -51,6 +61,22 @@ export function CoachAttention({
   );
 
   const items: ReactNode[] = [];
+  if (isAdmin && camp && roster.data && !setupHidden) {
+    const steps = setupSteps(camp, roster.data);
+    const next = steps.find((x) => !x.done);
+    if (next) {
+      const done = steps.filter((x) => x.done).length;
+      items.push(
+        <Item key="setup" tone="neutral" icon={<ListChecks size={16} />}
+          title={`Finish setting up the camp (${done} of ${steps.length})`}
+          detail={<>Next: {next.title}. <button type="button" className="underline underline-offset-2 hover:text-ink" onClick={() => {
+            setSetupHidden(true);
+            try { localStorage.setItem(hideKey, "1"); } catch { /* storage unavailable */ }
+          }}>Hide</button></>}
+          action={<Link href={next.href} className="text-xs font-semibold text-brand">Go</Link>} />,
+      );
+    }
+  }
   if (disputes.length) {
     items.push(
       <Item key="disputes" tone="warn" icon={<AlertTriangle size={16} />}
@@ -79,21 +105,20 @@ export function CoachAttention({
       <Item key="assess" tone="neutral" icon={<ClipboardCheck size={16} />}
         title={`${dueAssessment.length} due an assessment`}
         detail={<Names ids={dueAssessment.map((p) => p.id)} nameOf={nameOf} onOpen={onOpenPlayer} />}
-        action={<Link href="/selection" className="text-xs font-semibold text-brand">Board</Link>} />,
+        action={<Link href="/players" className="text-xs font-semibold text-brand">Assess</Link>} />,
     );
   }
 
   if (items.length === 0) {
     return (
-      <Card className="flex items-center gap-2 p-3 text-xs text-ink-soft">
-        <CheckCircle2 size={16} className="text-status-success-text" />
-        All caught up: no disputes, new injuries or overdue assessments.
+      <Card className="flex items-center gap-2.5 p-3.5 text-sm text-ink-soft">
+        <CheckCircle2 size={18} className="text-status-success-text" />
+        All caught up. No disputes, new injuries or overdue assessments.
       </Card>
     );
   }
   return (
     <Card className="!p-0">
-      <p className="px-4 pt-3 text-sm font-bold text-ink">Needs your attention</p>
       <div className="divide-y divide-line">{items}</div>
     </Card>
   );
@@ -103,7 +128,7 @@ function Item({ icon, title, detail, action, tone }: {
   icon: ReactNode; title: string; detail: ReactNode; action?: ReactNode; tone: "warn" | "bad" | "neutral";
 }) {
   return (
-    <div className="flex items-start gap-3 px-4 py-2.5">
+    <div className="flex items-start gap-3 px-4 py-3">
       <span className={cx(
         "mt-0.5 shrink-0",
         tone === "warn" ? "text-status-warn-text" : tone === "bad" ? "text-status-danger-text" : "text-brand",

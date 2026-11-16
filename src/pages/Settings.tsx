@@ -5,6 +5,7 @@ import { useSession } from "../lib/session";
 import { useAdminMutations, useMatches, useMembers, useRosterAdmin, useSessions, useStandings } from "../lib/api";
 import { errorText } from "../lib/supabase";
 import { inviteText, parseRosterLines } from "../lib/rosterImport";
+import { MAX_COURTS, useCourtMutations } from "../lib/sharedData";
 import { Badge, Button, Card, ConfirmDialog, Field, Input, PageTitle, Segmented, Select, Sheet, Textarea, Toggle, cx } from "../components/ui";
 import { CsvExportCard } from "../components/CsvExport";
 import { CampHistoryModal } from "../components/CampHistory";
@@ -29,6 +30,7 @@ export default function SettingsPage() {
   const camp = s.camp!;
   const roster = useRosterAdmin(camp.id, true);
   const mut = useAdminMutations(camp.id);
+  const courtMut = useCourtMutations(camp.id);
   const matches = useMatches(camp.id);
   const standings = useStandings(camp.id);
   const sessions = useSessions(camp.id);
@@ -100,7 +102,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="mb-2 overflow-x-auto">
+        <div className="mb-2">
           <Segmented<RosterFilter>
             value={filter}
             onChange={setFilter}
@@ -229,6 +231,34 @@ export default function SettingsPage() {
           </div>
           <Button type="submit" disabled={mut.updateCamp.isPending}>Save details</Button>
         </form>
+      </Card>
+
+      <Card>
+        <h2 className="text-sm font-bold">Courts</h2>
+        <p className="mb-2 mt-0.5 text-xs text-ink-soft">
+          How many courts the live court board shows. Coaches can change it from the Today page too. Lowering it frees the courts above.
+        </p>
+        <div className="grid grid-cols-8 gap-1">
+          {Array.from({ length: MAX_COURTS }, (_, i) => i + 1).map((n) => (
+            <button
+              key={n}
+              type="button"
+              disabled={courtMut.setCount.isPending}
+              onClick={() => n !== (camp.court_count ?? 4) && courtMut.setCount.mutate(n, {
+                onSuccess: () => toast.success(`Board set to ${n} court${n === 1 ? "" : "s"}`),
+                onError: onErr,
+              })}
+              aria-pressed={n === (camp.court_count ?? 4)}
+              aria-label={`${n} court${n === 1 ? "" : "s"}`}
+              className={cx(
+                "min-h-[40px] rounded-lg border text-sm font-bold",
+                n === (camp.court_count ?? 4) ? "border-brand-border bg-brand-pale text-brand" : "border-line bg-surface text-ink",
+              )}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
       </Card>
 
       {/* ── Status: kept apart from Save so it isn't hit by accident ── */}

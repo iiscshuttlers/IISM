@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Target, CheckCircle2, Circle, Edit3, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { Button, Card, Sheet } from "./ui";
+import { Button, Sheet, cx } from "./ui";
 import { useMembers } from "../lib/api";
 import { errorText } from "../lib/supabase";
 import { useNextFocus, useNextFocusMutations } from "../lib/sharedData";
@@ -12,12 +12,15 @@ export function NextSessionFocusCard({
   playerName,
   isStaff,
   onOpenSkills,
+  flat = false,
 }: {
   campId: string;
   personId: string | null;
   playerName?: string;
   isStaff?: boolean;
   onOpenSkills?: () => void;
+  /** A row inside another card instead of a card of its own. */
+  flat?: boolean;
 }) {
   const focusQ = useNextFocus(campId, personId);
   const members = useMembers(campId);
@@ -69,17 +72,15 @@ export function NextSessionFocusCard({
 
   return (
     <>
-      <Card
-        className={`border transition-all ${
-          focus?.completed
-            ? "bg-status-success-bg/20 border-status-success-border"
-            : focus
-            ? "bg-brand/5 border-brand/30"
-            : "bg-surface-2/60 border-line"
-        }`}
+      <div
+        className={cx(
+          "transition-colors",
+          flat ? "px-4 py-3" : "rounded-2xl p-4 shadow-card ring-1 ring-line/70",
+          focus?.completed ? "bg-status-success-bg/50" : flat ? "" : "bg-surface",
+        )}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-2.5 flex-1 min-w-0">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-1 basis-56 items-start gap-2.5">
             <button
               type="button"
               onClick={handleToggle}
@@ -131,7 +132,7 @@ export function NextSessionFocusCard({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
             {focus ? (
               <Button
                 size="sm"
@@ -159,7 +160,7 @@ export function NextSessionFocusCard({
             )}
           </div>
         </div>
-      </Card>
+      </div>
 
       {/* Focus Setter Modal */}
       <Sheet

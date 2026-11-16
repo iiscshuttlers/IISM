@@ -274,7 +274,7 @@ export function MatchForm({
       {fresh && !lockPlayers && recent.length > 0 && (
         <div>
           <p className="mb-1 text-xs font-semibold text-ink-soft">Recent line-ups</p>
-          <div className="flex gap-1.5 overflow-x-auto pb-1">
+          <div className="flex flex-wrap gap-1.5">
             {recent.map((l, i) => {
               const label = isSingles(l.category)
                 ? `${first(l.slots[0])} v ${first(l.slots[2])}`

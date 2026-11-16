@@ -33,7 +33,7 @@ A quick reference for players, coaches, and camp administrators.
 - **Editing (24 Hours):** The person who recorded the match can edit it within 24 hours while it remains `confirmed`.
 - **Disputing (24 Hours):** Any player who played in the match can dispute it within 24 hours if the score or winner was entered incorrectly. Enter a clear reason when disputing.
 - **Resolution:** A coach or admin reviews the dispute and can either resolve it with updated scores/winner or void it.
-- **Standings:** Only `confirmed` matches affect Elo ratings. Disputed and voided matches are excluded from rating calculations until resolved.
+- **Standings:** Only `confirmed` matches affect ratings. Disputed and voided matches don't count until a coach resolves them.
 
 ---
 
@@ -62,16 +62,16 @@ Consistent RPE logging helps coaches monitor fatigue, prevent injuries, and asse
 ## 4. Standings & Ratings
 
 - **Starting Rating:** Every player begins at **1200**.
-- **Elo Calculation ($K=32$):** Ratings adjust based on match outcome and expected probability of winning.
+- **How it moves:** Each confirmed match moves your rating (the Elo system). Beating a stronger side gains more than beating a weaker one.
+- **Settled dot:** Red means too few matches to trust the rating yet; green means it has settled.
 - **Doubles Rating:** For doubles pairs, the effective rating used is the average rating of both partners.
+- **By discipline:** Standings can switch between Overall, Singles, Doubles and Mixed. Each discipline has its own rating that only moves with that kind of match.
 - **Form:** Displays your last 5 match results (e.g. `WWLWW`).
 - **Privacy:** Depending on camp settings, players can either see the full leaderboard or their own personal row.
 
 ---
 
-## 5. Selection & Squad Announcement
+## 5. Players & Assessments
 
-- **Assessments:** Coaches periodically score players on **Technique**, **Fitness**, **Tactics**, and **Attitude** (1–5 scale).
-- **Selection Decision:** Players are designated as **Selected**, **Standby**, or **Not selected**.
-- **Squad Lock:** The admin locks the final selection once the number of selected players reaches the camp target.
-- **Public Squad:** When published, players can view the list of selected and standby teammates (coaching notes and private evaluations remain strictly confidential).
+- **Players tab (staff):** Every player in one list with rating, wins, attendance, drill minutes, average effort (RPE) and coach score. Sort by any of them, filter by men or women, and tap a name for the full record.
+- **Assessments:** Coaches score players on **Technique**, **Fitness**, **Tactics**, and **Attitude** (1–5 scale) with **Assess**. Players never see these scores.

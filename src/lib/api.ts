@@ -7,8 +7,9 @@ import type {
 } from "./types";
 import type { Category } from "./scores";
 
-const CAMP_COLS =
-  "id, name, starts_on, ends_on, status, selection_target, visibility, players_see_all_results, publish_selection, activity_enabled, selection_locked_at";
+// "*" rather than a column list so a newer column (e.g. court_count from 0005) can't break
+// loading the camp if the site deploys before its migration has been run.
+const CAMP_COLS = "*";
 
 // ───────── Camps & roster ─────────
 
@@ -140,6 +141,11 @@ export function useMatchMutations(campId: string) {
     dispute: useMutation({
       mutationFn: async ({ id, reason }: { id: string; reason: string }) =>
         must(await supabase.rpc("dispute_match", { p_match: id, p_reason: reason })),
+      onSuccess: after,
+    }),
+    /** Camp admin only, and only for a voided match. Can't be undone. */
+    removeForever: useMutation({
+      mutationFn: async (id: string) => must(await supabase.rpc("delete_match", { p_match: id })),
       onSuccess: after,
     }),
     resolve: useMutation({
@@ -397,6 +403,16 @@ export const useActivity = (campId: string | undefined) =>
           .limit(100),
       ) as ActivityRow[],
   });
+
+/** Marks one alert read (when it's opened). */
+export function useMarkActivityItemRead() {
+  const inv = useInvalidate();
+  return useMutation({
+    mutationFn: async (id: number) =>
+      must(await supabase.from("activity").update({ read_at: new Date().toISOString() }).eq("id", id).is("read_at", null)),
+    onSuccess: () => inv("activity"),
+  });
+}
 
 export function useMarkActivityRead(campId: string) {
   const inv = useInvalidate();
