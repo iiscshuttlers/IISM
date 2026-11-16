@@ -124,6 +124,8 @@ export interface Attendance {
   status: "present" | "late" | "absent";
   rpe: number | null;
   note: string | null;
+  /** When the person was first marked for this session (read-only; set by the database). */
+  created_at?: string;
 }
 
 export interface Assessment {

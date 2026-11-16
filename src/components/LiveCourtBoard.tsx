@@ -22,11 +22,14 @@ export function LiveCourtBoard({
   isStaff,
   players,
   onRecordMatchOnCourt,
+  hideWhenIdle = false,
 }: {
   campId: string;
   isStaff?: boolean;
   players: Member[];
   onRecordMatchOnCourt?: (courtNum: number) => void;
+  /** Render nothing while every court is open (players don't need an empty board). */
+  hideWhenIdle?: boolean;
 }) {
   // Shared by the whole camp: coaches assign courts, everyone sees the board update live.
   const courtsQ = useCourts(campId);
@@ -84,6 +87,8 @@ export function LiveCourtBoard({
       onError: onErr,
     });
   };
+
+  if (hideWhenIdle && !courtsQ.data?.length) return null;
 
   return (
     <>

@@ -14,6 +14,7 @@ import { TournamentGeneratorModal } from "../components/TournamentGenerator";
 import { Button, ConfirmDialog, Empty, Field, Input, PageTitle, Segmented, Sheet, Textarea, cx } from "../components/ui";
 import type { Category } from "../lib/scores";
 import type { Match } from "../lib/types";
+import { useTodayAttendance } from "../lib/today";
 
 export default function MatchesPage() {
   const s = useSession();
@@ -22,6 +23,8 @@ export default function MatchesPage() {
   const members = useMembers(campId);
   const standings = useStandings(campId);
   const mut = useMatchMutations(campId);
+  // Players checked in today are offered first when picking who played.
+  const { presentIds } = useTodayAttendance(campId);
   const [filter, setFilter] = useState<"all" | "mine" | "disputed">("all");
   const [catFilter, setCatFilter] = useState<string>("ALL");
   const [search, setSearch] = useState("");
@@ -304,6 +307,8 @@ export default function MatchesPage() {
             initialCategory={prefill?.category}
             initialSlots={prefill?.slots}
             recent={recentLineups}
+            meId={s.meId}
+            presentIds={presentIds}
             submitLabel="Save match"
             busy={mut.record.isPending}
             onSubmit={async (m) => {

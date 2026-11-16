@@ -25,6 +25,47 @@ export function parseGames(rows: { a: string; b: string }[]): { games: string[] 
   return { games: games.length ? games : null };
 }
 
+/** Points-per-game choices for quick entry, with the score a game is capped at. */
+export const GAME_POINTS = [
+  { target: 21, cap: 30 },
+  { target: 15, cap: 21 },
+  { target: 11, cap: 15 },
+] as const;
+
+/**
+ * The winner's score in a game to `target` points (win by 2, capped), given the loser's score.
+ * null when the loser's score is impossible for that game.
+ */
+export function winningScore(target: number, loser: number): number | null {
+  const cap = GAME_POINTS.find((g) => g.target === target)?.cap ?? target;
+  if (!Number.isInteger(loser) || loser < 0 || loser >= cap) return null;
+  return loser <= target - 2 ? target : Math.min(loser + 2, cap);
+}
+
+/** Quick entry for one game: who won, and the losing side's score. */
+export interface QuickGame {
+  winner: 1 | 2 | null;
+  loser: string;
+}
+
+/** Turns quick entries into the "A"/"B" score rows parseGames reads. Empty games are skipped. */
+export function quickGamesToRows(games: QuickGame[], target: number): { rows: { a: string; b: string }[]; error?: string } {
+  const rows: { a: string; b: string }[] = [];
+  for (const [i, g] of games.entries()) {
+    const l = g.loser.trim();
+    if (!g.winner && !l) {
+      rows.push({ a: "", b: "" });
+      continue;
+    }
+    if (!g.winner) return { rows: [], error: `Game ${i + 1}: tap who won` };
+    if (!/^\d{1,2}$/.test(l)) return { rows: [], error: `Game ${i + 1}: enter the losing side's score` };
+    const w = winningScore(target, Number(l));
+    if (w === null) return { rows: [], error: `Game ${i + 1}: ${l} is too high for a ${target}-point game` };
+    rows.push(g.winner === 1 ? { a: String(w), b: l } : { a: l, b: String(w) });
+  }
+  return { rows };
+}
+
 /** Side that won more games, or null if no games or level. */
 export function winnerFromGames(games: string[] | null): 1 | 2 | null {
   if (!games?.length) return null;

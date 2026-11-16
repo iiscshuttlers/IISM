@@ -1,14 +1,14 @@
 import { Suspense, lazy, type ReactNode } from "react";
 import { Link, Redirect, Route, Router, Switch, useLocation } from "wouter";
-import { Bell, CalendarDays, ClipboardList, Dumbbell, LogOut, Settings, Swords, Trophy, Users } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Bell, CalendarDays, CircleUser, ClipboardList, Dumbbell, Settings, Swords, Trophy } from "lucide-react";
+import { useEffect } from "react";
 import { useSession } from "./lib/session";
 import { supabaseConfigured } from "./lib/supabase";
-import { useActivity } from "./lib/api";
-import { Button, ConfirmDialog, Select, cx } from "./components/ui";
-import { outbox } from "./lib/outbox";
+import { useActivity, useMembers } from "./lib/api";
+import { Avatar, Select, cx } from "./components/ui";
 import { LoginPage, NoCampPage, NotOnRosterPage, SetupNeededPage } from "./pages/Gate";
 import TodayPage from "./pages/Today";
+import PlayerTodayPage from "./pages/PlayerToday";
 import MatchesPage from "./pages/Matches";
 
 // Less-used pages load on demand (the service worker still precaches them for offline use).
@@ -19,8 +19,8 @@ const SelectionPage = lazy(() => import("./pages/Selection"));
 const SettingsPage = lazy(() => import("./pages/Settings"));
 const ActivityPage = lazy(() => import("./pages/Activity"));
 const InsightsPage = lazy(() => import("./pages/Insights"));
+const MePage = lazy(() => import("./pages/Me"));
 import { ConnectionBar, SyncEngine } from "./components/AppChrome";
-import { AccessibilityButton } from "./components/AccessibilityModal";
 import { AppLogo } from "./components/AppLogo";
 import { applyA11yPrefs, getA11yPrefs } from "./lib/campExtended";
 
@@ -38,7 +38,9 @@ export default function App() {
       <Shell>
         <Suspense fallback={<Splash />}>
           <Switch>
-            <Route path="/" component={TodayPage} />
+            {/* Players get a home screen ordered around their day; staff get the coaching hub. */}
+            <Route path="/" component={s.role === "player" ? PlayerTodayPage : TodayPage} />
+            <Route path="/me" component={MePage} />
             <Route path="/matches" component={MatchesPage} />
             <Route path="/standings" component={StandingsPage} />
             <Route path="/training" component={TrainingPage} />
@@ -69,12 +71,15 @@ function Shell({ children }: { children: ReactNode }) {
   const [loc] = useLocation();
   const activity = useActivity(s.camp?.id);
   const unread = (activity.data ?? []).filter((a) => !a.read_at).length;
-  const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const members = useMembers(s.camp?.id);
+  const myName = (members.data ?? []).find((m) => m.id === s.meId)?.full_name;
 
   useEffect(() => {
     applyA11yPrefs(getA11yPrefs());
   }, []);
 
+  // Players: their own space (history, goals, reports, settings) is a tab. The squad lives
+  // there and on Today once it's announced. Staff keep Selection; "Me" is the header avatar.
   const nav = [
     { href: "/", label: "Today", icon: CalendarDays },
     { href: "/matches", label: "Matches", icon: Swords },
@@ -82,7 +87,7 @@ function Shell({ children }: { children: ReactNode }) {
     { href: "/training", label: "Training", icon: Dumbbell },
     s.isStaff
       ? { href: "/selection", label: "Selection", icon: ClipboardList }
-      : { href: "/squad", label: "Squad", icon: Users },
+      : { href: "/me", label: "Me", icon: CircleUser },
   ];
 
   return (
@@ -120,7 +125,6 @@ function Shell({ children }: { children: ReactNode }) {
               </Select>
             )}
           </div>
-          <AccessibilityButton />
           <Link href="/activity" aria-label={`Activity${unread ? `, ${unread} unread` : ""}`}
             className="relative rounded-xl p-2 text-ink-soft transition hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
             <Bell size={19} />
@@ -135,15 +139,16 @@ function Shell({ children }: { children: ReactNode }) {
               <Settings size={19} />
             </Link>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setConfirmSignOut(true)}
-            aria-label="Sign out"
-            className="!min-h-[36px] !px-2 text-ink-soft hover:text-red-600"
+          <Link
+            href="/me"
+            aria-label="Me: profile, settings and sign out"
+            className={cx(
+              "rounded-full p-0.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+              loc === "/me" ? "ring-2 ring-brand" : "hover:ring-2 hover:ring-line",
+            )}
           >
-            <LogOut size={18} />
-          </Button>
+            <Avatar name={myName ?? s.auth?.user.email ?? "?"} size="sm" />
+          </Link>
         </div>
         <ConnectionBar campId={s.camp!.id} />
       </header>
@@ -182,22 +187,6 @@ function Shell({ children }: { children: ReactNode }) {
           })}
         </div>
       </nav>
-
-      <ConfirmDialog
-        open={confirmSignOut}
-        title="Sign out of camp?"
-        message={
-          outbox.all().filter((i) => !i.error).length > 0
-            ? `${outbox.all().filter((i) => !i.error).length} unsent match results are waiting to sync. Signing out will clear them from this phone. Sign out anyway?`
-            : "You will need your login to sign back into this camp."
-        }
-        confirmLabel="Sign out"
-        onConfirm={async () => {
-          setConfirmSignOut(false);
-          await s.signOut();
-        }}
-        onCancel={() => setConfirmSignOut(false)}
-      />
     </div>
   );
 }

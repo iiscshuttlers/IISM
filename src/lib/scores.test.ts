@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseGames, validatePlayers, winnerFromGames } from "./scores";
+import { parseGames, quickGamesToRows, validatePlayers, winnerFromGames, winningScore } from "./scores";
 
 describe("parseGames", () => {
   it("ignores empty rows and normalises numbers", () => {
@@ -41,5 +41,40 @@ describe("validatePlayers", () => {
   });
   it("needs partners in doubles", () => {
     expect(validatePlayers("MD", ["a", null, "b", null], genderOf)).toMatch(/every player/);
+  });
+});
+
+describe("winningScore", () => {
+  it("is the target when the loser is two or more behind", () => {
+    expect(winningScore(21, 0)).toBe(21);
+    expect(winningScore(21, 19)).toBe(21);
+    expect(winningScore(15, 13)).toBe(15);
+    expect(winningScore(11, 9)).toBe(11);
+  });
+  it("goes to deuce: win by two, up to the cap", () => {
+    expect(winningScore(21, 20)).toBe(22);
+    expect(winningScore(21, 28)).toBe(30);
+    expect(winningScore(21, 29)).toBe(30);
+    expect(winningScore(15, 19)).toBe(21);
+    expect(winningScore(11, 14)).toBe(15);
+  });
+  it("rejects impossible losing scores", () => {
+    expect(winningScore(21, 30)).toBeNull();
+    expect(winningScore(11, 15)).toBeNull();
+    expect(winningScore(21, -1)).toBeNull();
+    expect(winningScore(21, 1.5)).toBeNull();
+  });
+});
+
+describe("quickGamesToRows", () => {
+  it("builds full scores from who won and the losing score", () => {
+    const r = quickGamesToRows([{ winner: 1, loser: "17" }, { winner: 2, loser: "20" }, { winner: null, loser: "" }], 21);
+    expect(r).toEqual({ rows: [{ a: "21", b: "17" }, { a: "20", b: "22" }, { a: "", b: "" }] });
+    expect(parseGames(r.rows).games).toEqual(["21-17", "20-22"]);
+  });
+  it("asks for whatever is missing", () => {
+    expect(quickGamesToRows([{ winner: null, loser: "12" }], 21).error).toMatch(/who won/);
+    expect(quickGamesToRows([{ winner: 1, loser: "" }], 21).error).toMatch(/losing side/);
+    expect(quickGamesToRows([{ winner: 1, loser: "31" }], 21).error).toMatch(/too high/);
   });
 });

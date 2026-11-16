@@ -189,7 +189,7 @@ export const useAttendance = (sessionIds: string[]) =>
     enabled: sessionIds.length > 0,
     queryFn: async () =>
       must(
-        await supabase.from("attendance").select("session_id, person_id, status, rpe, note").in("session_id", sessionIds),
+        await supabase.from("attendance").select("session_id, person_id, status, rpe, note, created_at").in("session_id", sessionIds),
       ) as Attendance[],
   });
 
