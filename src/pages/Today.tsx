@@ -164,20 +164,81 @@ export default function TodayPage() {
   };
 
   const handleMarkAllPresent = () => {
-    if (!todaySession) return;
-    for (const p of playerMembers) {
-      const cur = (attendance.data ?? []).find((a) => a.session_id === todaySession.id && a.person_id === p.id);
-      if (cur?.status !== "present") {
-        trainingMut.setAttendance.mutate({
-          session_id: todaySession.id,
-          person_id: p.id,
-          status: "present",
-          rpe: cur?.rpe ?? null,
-          note: cur?.note ?? null,
-        });
+    const applyAll = (sessionId: string) => {
+      for (const p of playerMembers) {
+        const cur = (attendance.data ?? []).find((a) => a.session_id === sessionId && a.person_id === p.id);
+        if (cur?.status !== "present") {
+          trainingMut.setAttendance.mutate({
+            session_id: sessionId,
+            person_id: p.id,
+            status: "present",
+            rpe: cur?.rpe ?? null,
+            note: cur?.note ?? null,
+          });
+        }
       }
+      toast.success("Marked all players present");
+    };
+
+    if (!todaySession) {
+      trainingMut.addSession.mutate(
+        {
+          session_date: today(),
+          title: "Today's Training & Matches",
+          focus: "Practice & Matchplay",
+          notes: "",
+          duration_min: 120,
+        },
+        {
+          onSuccess: (res) => applyAll(res.id),
+        }
+      );
+    } else {
+      applyAll(todaySession.id);
     }
-    toast.success("Marked all players present");
+  };
+
+  const handleTogglePlayerAttendance = (playerId: string) => {
+    const cur = attendanceMap[playerId];
+    const nextStatus: "present" | "late" | "absent" =
+      !cur ? "present" : cur === "present" ? "late" : cur === "late" ? "absent" : "present";
+
+    const applyStatus = (sessionId: string) => {
+      const curAtt = (attendance.data ?? []).find((a) => a.session_id === sessionId && a.person_id === playerId);
+      trainingMut.setAttendance.mutate(
+        {
+          session_id: sessionId,
+          person_id: playerId,
+          status: nextStatus,
+          rpe: curAtt?.rpe ?? null,
+          note: curAtt?.note ?? null,
+        },
+        {
+          onSuccess: () => {
+            const pName = playerMembers.find((m) => m.id === playerId)?.full_name ?? "Player";
+            const label = nextStatus === "present" ? "Present on court" : nextStatus === "late" ? "Marked Late" : "Marked Away";
+            toast.success(`${pName}: ${label}`);
+          },
+        }
+      );
+    };
+
+    if (!todaySession) {
+      trainingMut.addSession.mutate(
+        {
+          session_date: today(),
+          title: "Today's Training & Matches",
+          focus: "Practice & Matchplay",
+          notes: "",
+          duration_min: 120,
+        },
+        {
+          onSuccess: (res) => applyStatus(res.id),
+        }
+      );
+    } else {
+      applyStatus(todaySession.id);
+    }
   };
 
   // Roster breakdown
@@ -378,8 +439,8 @@ export default function TodayPage() {
         </Button>
       </div>
 
-      {/* Player Availability Self-Check-in */}
-      {isPlayer && (
+      {/* Player / Staff Self-Check-in */}
+      {(isPlayer || (s.isStaff && s.meId)) && (
         <Card className="border-brand/30 bg-surface">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-1.5 font-bold text-sm text-ink">
@@ -387,13 +448,12 @@ export default function TodayPage() {
               <span>Are you at the hall today?</span>
             </div>
             {myTodayAtt?.status && (
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                myTodayAtt.status === "present"
-                  ? "bg-status-success-bg text-status-success-text border border-status-success-border"
-                  : myTodayAtt.status === "late"
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${myTodayAtt.status === "present"
+                ? "bg-status-success-bg text-status-success-text border border-status-success-border"
+                : myTodayAtt.status === "late"
                   ? "bg-status-warn-bg text-status-warn-text border border-status-warn-border"
                   : "bg-status-danger-bg text-status-danger-text border border-status-danger-border"
-              }`}>
+                }`}>
                 {myTodayAtt.status === "present" ? "Present on court" : myTodayAtt.status === "late" ? "Arriving late" : "Rest / Unavailable"}
               </span>
             )}
@@ -405,11 +465,10 @@ export default function TodayPage() {
             <button
               type="button"
               onClick={() => handleSetMyStatus("present")}
-              className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all ${
-                myTodayAtt?.status === "present"
-                  ? "bg-status-success-bg text-status-success-text border-status-success-border shadow-xs"
-                  : "bg-surface-2 text-ink border-line hover:border-status-success-border"
-              }`}
+              className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all ${myTodayAtt?.status === "present"
+                ? "bg-status-success-bg text-status-success-text border-status-success-border shadow-xs"
+                : "bg-surface-2 text-ink border-line hover:border-status-success-border"
+                }`}
             >
               <UserCheck size={14} className="text-status-success-text" />
               <span>Present</span>
@@ -417,11 +476,10 @@ export default function TodayPage() {
             <button
               type="button"
               onClick={() => handleSetMyStatus("late")}
-              className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all ${
-                myTodayAtt?.status === "late"
-                  ? "bg-status-warn-bg text-status-warn-text border-status-warn-border shadow-xs"
-                  : "bg-surface-2 text-ink border-line hover:border-status-warn-border"
-              }`}
+              className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all ${myTodayAtt?.status === "late"
+                ? "bg-status-warn-bg text-status-warn-text border-status-warn-border shadow-xs"
+                : "bg-surface-2 text-ink border-line hover:border-status-warn-border"
+                }`}
             >
               <Clock size={14} className="text-status-warn-text" />
               <span>Late</span>
@@ -429,11 +487,10 @@ export default function TodayPage() {
             <button
               type="button"
               onClick={() => handleSetMyStatus("absent")}
-              className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all ${
-                myTodayAtt?.status === "absent"
-                  ? "bg-status-danger-bg text-status-danger-text border-status-danger-border shadow-xs"
-                  : "bg-surface-2 text-ink border-line hover:border-status-danger-border"
-              }`}
+              className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all ${myTodayAtt?.status === "absent"
+                ? "bg-status-danger-bg text-status-danger-text border-status-danger-border shadow-xs"
+                : "bg-surface-2 text-ink border-line hover:border-status-danger-border"
+                }`}
             >
               <UserX size={14} className="text-status-danger-text" />
               <span>Away</span>
@@ -475,24 +532,33 @@ export default function TodayPage() {
             {playerMembers.map((p) => {
               const status = attendanceMap[p.id];
               return (
-                <div
+                <button
                   key={p.id}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border ${
+                  type="button"
+                  onClick={() => handleTogglePlayerAttendance(p.id)}
+                  title={status ? `Current: ${status}. Click to cycle (Present -> Late -> Away)` : "Click to mark Present"}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition cursor-pointer hover:scale-105 active:scale-95 ${
                     status === "present"
-                      ? "bg-status-success-bg text-status-success-text border-status-success-border font-semibold"
+                      ? "bg-status-success-bg text-status-success-text border-status-success-border font-semibold shadow-2xs"
                       : status === "late"
                       ? "bg-status-warn-bg text-status-warn-text border-status-warn-border"
                       : status === "absent"
                       ? "bg-status-danger-bg/60 text-status-danger-text border-status-danger-border opacity-70 line-through"
-                      : "bg-surface-2 text-ink-soft border-line"
+                      : "bg-surface-2 text-ink-soft border-line hover:border-brand/40"
                   }`}
                 >
                   <Avatar name={p.full_name} size="xs" />
                   <span>{p.full_name}</span>
-                </div>
+                  <span className="text-[10px] font-bold opacity-80">
+                    {status === "present" ? "✓" : status === "late" ? "⏳" : status === "absent" ? "✕" : "+"}
+                  </span>
+                </button>
               );
             })}
           </div>
+          <p className="text-[11px] text-ink-soft mt-2 italic">
+            Tip: Tap any player chip to cycle attendance (Present → Late → Away), or tap Mark All Present.
+          </p>
         </Card>
       )}
 
@@ -530,11 +596,10 @@ export default function TodayPage() {
                   key={val}
                   type="button"
                   onClick={() => handleSetMyRpe(val)}
-                  className={`py-2 rounded-xl font-bold text-xs transition-all flex flex-col items-center justify-center border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 active:scale-95 ${
-                    selected
-                      ? "bg-brand-pale text-brand border-brand-border font-black shadow-xs"
-                      : "bg-surface-2 text-ink border-line hover:border-brand-border hover:text-brand"
-                  }`}
+                  className={`py-2 rounded-xl font-bold text-xs transition-all flex flex-col items-center justify-center border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 active:scale-95 ${selected
+                    ? "bg-brand-pale text-brand border-brand-border font-black shadow-xs"
+                    : "bg-surface-2 text-ink border-line hover:border-brand-border hover:text-brand"
+                    }`}
                 >
                   <span>{val}</span>
                   {selected && <Check size={10} className="mt-0.5" />}
