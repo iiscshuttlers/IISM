@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
@@ -310,6 +311,12 @@ export const Empty = ({ children }: { children: ReactNode }) => (
   <p className="rounded-2xl bg-surface-2/70 px-6 py-7 text-center text-sm text-ink-soft">{children}</p>
 );
 
+/**
+ * Overlays render at the end of <body>. Inside the page they'd share its layer (the page-in
+ * animation keeps a transform on <main>), so the bottom tab bar would draw over them.
+ */
+const toBody = (node: ReactNode) => createPortal(node, document.body);
+
 export function Sheet({ open, onClose, title, children, fullScreen = false, closeOnBackdrop = true }: {
   open: boolean;
   onClose: () => void;
@@ -323,7 +330,7 @@ export function Sheet({ open, onClose, title, children, fullScreen = false, clos
   useOverlayDismiss(open, onClose);
   if (!open) return null;
   if (fullScreen) {
-    return (
+    return toBody(
       <div
         role="dialog"
         aria-modal="true"
@@ -343,10 +350,10 @@ export function Sheet({ open, onClose, title, children, fullScreen = false, clos
         <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
           <div className="mx-auto max-w-lg">{children}</div>
         </div>
-      </div>
+      </div>,
     );
   }
-  return (
+  return toBody(
     <div
       className="fixed inset-0 z-50 flex animate-fade-in items-end justify-center bg-black/40 backdrop-blur-[3px] sm:items-center sm:p-6"
       onClick={closeOnBackdrop ? onClose : undefined}
@@ -374,7 +381,7 @@ export function Sheet({ open, onClose, title, children, fullScreen = false, clos
         </div>
         {children}
       </div>
-    </div>
+    </div>,
   );
 }
 
@@ -399,7 +406,7 @@ export function ConfirmDialog({
 }) {
   useOverlayDismiss(open, onCancel);
   if (!open) return null;
-  return (
+  return toBody(
     <div
       className="fixed inset-0 z-[60] flex animate-fade-in items-center justify-center bg-black/45 p-4 backdrop-blur-[3px]"
       onClick={onCancel}
@@ -428,7 +435,7 @@ export function ConfirmDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
   );
 }
 

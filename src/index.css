@@ -233,3 +233,105 @@ button:focus:not(:focus-visible) { outline: none; }
   animation-iteration-count: 1 !important;
   transition-duration: 0.001ms !important;
 }
+
+/* ───────── Toasts (Sonner, see components/AppToaster.tsx) ───────── */
+/* Just below the phone/tablet top bar (its height is kept in --header-h by useToastsBelow);
+   on wide screens there's no top bar. */
+:root {
+  --toast-top: calc(var(--header-h, calc(env(safe-area-inset-top) + 12px)) + 12px);
+  --toast-shadow: 0 14px 34px -14px rgb(15 23 42 / 0.3), 0 2px 6px -1px rgb(15 23 42 / 0.08);
+}
+@media (min-width: 1024px) { :root { --toast-top: 24px; } }
+@media (prefers-color-scheme: dark) {
+  :root { --toast-shadow: 0 14px 34px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.03); }
+}
+
+/* Selectors carry [data-sonner-theme] to outrank Sonner's own sheet, which loads after this one. */
+[data-sonner-toaster][data-sonner-theme] {
+  font-family: var(--font-sans);
+}
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled="true"] {
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 44px 12px 12px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--toast-shadow);
+  font-size: 0.875rem;
+}
+
+/* Icon in a tinted circle, coloured by type. */
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled="true"] [data-icon] {
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--brand-pale);
+  color: var(--brand);
+}
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled="true"] [data-icon] svg {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-type="success"] [data-icon] { background: var(--status-success-bg); color: var(--status-success-text); }
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-type="error"] [data-icon] { background: var(--status-danger-bg); color: var(--status-danger-text); }
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-type="warning"] [data-icon] { background: var(--status-warn-bg); color: var(--status-warn-text); }
+
+/* Text: one line sits level with the icon; longer messages wrap beside it. */
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled="true"] [data-content] {
+  min-height: 32px;
+  justify-content: center;
+  gap: 2px;
+}
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled="true"] [data-title] {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--ink);
+}
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled="true"] [data-description] {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+/* A quiet dismiss button on the right, not a badge hanging off the corner. */
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled="true"] [data-close-button] {
+  top: 10px;
+  right: 10px;
+  left: auto;
+  transform: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-faint);
+}
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled="true"] [data-close-button] svg { width: 14px; height: 14px; }
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled="true"]:hover [data-close-button]:hover,
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled="true"] [data-close-button]:focus-visible {
+  background: var(--surface-2);
+  border: 0;
+  color: var(--ink);
+}
+
+/* Action (e.g. Undo) and cancel buttons. */
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled="true"] [data-button] {
+  align-self: center;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  background: var(--brand);
+  color: #fff;
+}
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled="true"] [data-button][data-cancel] {
+  background: var(--surface-2);
+  color: var(--ink);
+}
