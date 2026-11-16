@@ -21,6 +21,7 @@ const ActivityPage = lazy(() => import("./pages/Activity"));
 const InsightsPage = lazy(() => import("./pages/Insights"));
 import { ConnectionBar, SyncEngine } from "./components/AppChrome";
 import { AccessibilityButton } from "./components/AccessibilityModal";
+import { AppLogo } from "./components/AppLogo";
 import { applyA11yPrefs, getA11yPrefs } from "./lib/campExtended";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -56,8 +57,9 @@ export default function App() {
 
 function Splash() {
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-brand" aria-label="Loading" />
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3">
+      <AppLogo size={52} className="animate-pulse shadow-md rounded-2xl" />
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-line border-t-brand" aria-label="Loading" />
     </div>
   );
 }
@@ -86,52 +88,36 @@ function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto min-h-screen max-w-3xl pb-28">
       <header className="sticky top-0 z-30 border-b border-line bg-surface/90 backdrop-blur-md pt-[env(safe-area-inset-top)]">
-        <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3">
-          <div className="min-w-0 flex-1">
-            {s.camps.length > 1 ? (
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Link
-                  href="/"
-                  className="truncate font-bold text-ink text-base hover:text-brand transition-colors cursor-pointer"
-                  title="Go to Today (home)"
-                >
-                  {s.camp!.name}
-                </Link>
-                <Select
-                  aria-label="Switch camp"
-                  value={s.camp!.id}
-                  onChange={(e) => s.setCampId(e.target.value)}
-                  className="!w-auto !border-0 !bg-transparent !p-0 font-semibold text-xs text-brand cursor-pointer shrink-0"
-                >
-                  {s.camps.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      ▾ {c.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            ) : (
-              <Link
-                href="/"
-                className="block min-w-0 group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded-md"
-                title="Go to Today (home)"
-              >
-                <p className="truncate font-bold text-ink text-base group-hover:text-brand transition-colors">
+        <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5">
+          <div className="min-w-0 flex-1 flex items-center gap-2.5">
+            <Link
+              href="/"
+              className="flex items-center gap-2.5 min-w-0 group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded-lg p-0.5 -m-0.5"
+              title="Go to Today (home)"
+            >
+              <AppLogo size={36} className="shadow-xs group-hover:scale-105 transition-transform" />
+              <div className="min-w-0">
+                <p className="truncate font-bold text-ink text-base group-hover:text-brand transition-colors leading-tight">
                   {s.camp!.name}
                 </p>
                 <p className="text-[11px] text-ink-soft capitalize truncate leading-tight group-hover:text-ink transition-colors">
                   {s.role ?? "member"} · Training camp
                 </p>
-              </Link>
-            )}
+              </div>
+            </Link>
             {s.camps.length > 1 && (
-              <Link
-                href="/"
-                className="block text-[11px] text-ink-soft capitalize truncate leading-tight hover:text-ink transition-colors"
-                title="Go to Today (home)"
+              <Select
+                aria-label="Switch camp"
+                value={s.camp!.id}
+                onChange={(e) => s.setCampId(e.target.value)}
+                className="!w-auto !border-0 !bg-transparent !p-0 font-semibold text-xs text-brand cursor-pointer shrink-0"
               >
-                {s.role ?? "member"} · Training camp
-              </Link>
+                {s.camps.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    ▾ {c.name}
+                  </option>
+                ))}
+              </Select>
             )}
           </div>
           <AccessibilityButton />
