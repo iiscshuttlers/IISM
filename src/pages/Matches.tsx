@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { Plus, Play, Search, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
-import { useMatchMutations, useMatches, useMembers, useStandings } from "../lib/api";
+import { useMatchMutations, useMatches, useMembers, useStandings, type MatchInput } from "../lib/api";
 import { errorText } from "../lib/supabase";
 import { MatchForm, type Lineup } from "../components/MatchForm";
 import { outbox, useOutbox } from "../lib/outbox";
@@ -108,8 +108,31 @@ export default function MatchesPage() {
     setPrefill({ category: m.category, slots: [m.t1_p1, m.t1_p2, m.t2_p1, m.t2_p2] });
     setRecording(true);
   };
-  const savedToast = (r: { queued: boolean }) =>
-    r.queued ? toast.success("No signal: saved on this phone. It will send automatically.") : toast.success("Match recorded");
+  const savedToast = (r: { id: string | null; queued: boolean }, input?: MatchInput) => {
+    if (r.queued) {
+      toast.success("No signal: saved on this phone. It will send automatically.", { duration: 6000 });
+    } else {
+      toast.success("Match recorded", {
+        duration: 10000,
+        action: {
+          label: "Edit / Correct",
+          onClick: () => {
+            if (r.id) {
+              const found = (matches.data ?? []).find((x) => x.id === r.id);
+              if (found) {
+                setEditing(found);
+                return;
+              }
+            }
+            if (input) {
+              setPrefill({ category: input.category, slots: input.slots });
+              setRecording(true);
+            }
+          },
+        },
+      });
+    }
+  };
 
   const people = members.data ?? [];
   const players = people.filter((p) => p.role === "player");
@@ -284,7 +307,8 @@ export default function MatchesPage() {
             submitLabel="Save match"
             busy={mut.record.isPending}
             onSubmit={async (m) => {
-              savedToast(await mut.record.mutateAsync(m));
+              const res = await mut.record.mutateAsync(m);
+              savedToast(res, m);
               setRecording(false);
               setPrefill(null);
             }}

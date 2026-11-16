@@ -1,6 +1,85 @@
+import { useEffect, useRef } from "react";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
+
+// ───────── Overlay behaviour: Esc, the phone's Back button, scroll lock ─────────
+
+const overlayStack: string[] = [];
+let overlaySeq = 0;
+let bodyOverflowBefore = "";
+
+/** Stops the next popstate (the one our own history.back() causes) reaching anyone else. */
+function swallowNextPop() {
+  const done = () => {
+    window.removeEventListener("popstate", swallow, true);
+    window.clearTimeout(timer);
+  };
+  const swallow = (e: Event) => {
+    e.stopImmediatePropagation();
+    done();
+  };
+  const timer = window.setTimeout(done, 1000);
+  window.addEventListener("popstate", swallow, true);
+}
+
+/**
+ * While `open`: Esc and the phone's Back button close the top-most overlay (instead of leaving
+ * the app), and the page behind it stops scrolling.
+ */
+export function useOverlayDismiss(open: boolean, onClose: () => void) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  useEffect(() => {
+    if (!open || typeof window === "undefined") return;
+    const id = `overlay-${++overlaySeq}`;
+    overlayStack.push(id);
+    const isTop = () => overlayStack[overlayStack.length - 1] === id;
+
+    if (overlayStack.length === 1) {
+      bodyOverflowBefore = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+    }
+
+    // One same-URL history entry per overlay, so Back pops it. Deferred a tick so React
+    // StrictMode's mount → unmount → mount in development doesn't push and pop twice.
+    let pushed = false;
+    let closedByBack = false;
+    const pushTimer = window.setTimeout(() => {
+      window.history.pushState({ ...(window.history.state ?? {}), overlay: id }, "");
+      pushed = true;
+    }, 0);
+
+    const onPop = () => {
+      if (pushed && isTop()) {
+        closedByBack = true;
+        closeRef.current();
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isTop()) {
+        e.preventDefault();
+        closeRef.current();
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    window.addEventListener("keydown", onKey);
+
+    return () => {
+      window.clearTimeout(pushTimer);
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener("keydown", onKey);
+      overlayStack.splice(overlayStack.indexOf(id), 1);
+      if (overlayStack.length === 0) document.body.style.overflow = bodyOverflowBefore;
+      // Closed with ✕, Cancel or Save: drop our entry so Back still leaves the page next time.
+      if (pushed && !closedByBack && window.history.state?.overlay === id) {
+        swallowNextPop();
+        window.history.back();
+      }
+    };
+  }, [open]);
+}
 
 export function Button({
   variant = "primary",
@@ -174,10 +253,47 @@ export const Empty = ({ children }: { children: ReactNode }) => (
   <p className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-ink-soft">{children}</p>
 );
 
-export function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
+export function Sheet({ open, onClose, title, children, fullScreen = false, closeOnBackdrop = true }: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: ReactNode;
+  /** Covers the whole screen (no backdrop to tap by mistake), e.g. the live scorer. */
+  fullScreen?: boolean;
+  /** Tapping the dimmed area outside closes the sheet. */
+  closeOnBackdrop?: boolean;
+}) {
+  useOverlayDismiss(open, onClose);
   if (!open) return null;
+  if (fullScreen) {
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="fixed inset-0 z-50 flex flex-col bg-surface pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+          <h2 className="text-lg font-bold text-ink">{title}</h2>
+          <button
+            onClick={onClose}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-soft hover:bg-surface-2 transition"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+          <div className="mx-auto max-w-lg">{children}</div>
+        </div>
+      </div>
+    );
+  }
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-[2px] sm:items-center sm:p-4"
+      onClick={closeOnBackdrop ? onClose : undefined}
+    >
       <div
         role="dialog"
         aria-modal="true"
@@ -222,6 +338,7 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  useOverlayDismiss(open, onCancel);
   if (!open) return null;
   return (
     <div

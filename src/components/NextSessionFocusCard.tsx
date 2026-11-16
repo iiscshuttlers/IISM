@@ -1,13 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Target, CheckCircle2, Circle, Edit3, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Card, Sheet } from "./ui";
-import {
-  getNextSessionFocus,
-  saveNextSessionFocus,
-  toggleNextSessionFocus,
-  type NextSessionFocus,
-} from "../lib/campExtended";
+import { useMembers } from "../lib/api";
+import { errorText } from "../lib/supabase";
+import { useNextFocus, useNextFocusMutations } from "../lib/sharedData";
 
 export function NextSessionFocusCard({
   campId,
@@ -22,52 +19,52 @@ export function NextSessionFocusCard({
   isStaff?: boolean;
   onOpenSkills?: () => void;
 }) {
-  const [focus, setFocus] = useState<NextSessionFocus | null>(null);
+  const focusQ = useNextFocus(campId, personId);
+  const members = useMembers(campId);
+  const mut = useNextFocusMutations(campId);
+  const focus = focusQ.data ?? null;
   const [modalOpen, setModalOpen] = useState(false);
   const [customText, setCustomText] = useState("");
-  const [assignedBy, setAssignedBy] = useState(isStaff ? "Coach" : "Self");
-
-  const refresh = () => {
-    if (campId && personId) {
-      setFocus(getNextSessionFocus(campId, personId));
-    } else {
-      setFocus(null);
-    }
-  };
-
-  useEffect(() => {
-    refresh();
-    const handleStorageChange = () => refresh();
-    window.addEventListener("iism_extended_change", handleStorageChange);
-    return () => window.removeEventListener("iism_extended_change", handleStorageChange);
-  }, [campId, personId]);
 
   if (!personId) return null;
 
+  const setter = (members.data ?? []).find((m) => m.id === focus?.set_by);
+  const setByLabel = !focus
+    ? ""
+    : focus.set_by === personId
+    ? "you"
+    : setter
+    ? setter.role === "player" ? setter.full_name : `Coach ${setter.full_name}`
+    : "your coach";
+
   const handleToggle = () => {
     if (!focus) return;
-    const newState = !focus.completed;
-    toggleNextSessionFocus(campId, personId, newState);
-    refresh();
-    if (newState) {
-      toast.success("Great work locking in on your focus today! 🎯");
-    }
+    const completed = !focus.completed;
+    mut.setCompleted.mutate(
+      { personId, completed },
+      {
+        onSuccess: () => {
+          if (completed) toast.success("Great work locking in on your focus today! 🎯");
+        },
+        onError: (e) => toast.error(errorText(e)),
+      },
+    );
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customText.trim()) return;
-
-    saveNextSessionFocus(
-      campId,
-      personId,
-      customText.trim(),
-      isStaff ? (assignedBy.trim() || "Coach") : "Self"
+    mut.set.mutate(
+      { personId, text: customText },
+      {
+        onSuccess: () => {
+          toast.success("Next session focus set!");
+          setCustomText("");
+          setModalOpen(false);
+        },
+        onError: (err) => toast.error(errorText(err)),
+      },
     );
-    toast.success("Next session focus set!");
-    setCustomText("");
-    setModalOpen(false);
-    refresh();
   };
 
   return (
@@ -86,9 +83,9 @@ export function NextSessionFocusCard({
             <button
               type="button"
               onClick={handleToggle}
-              disabled={!focus}
+              disabled={!focus || mut.setCompleted.isPending}
               className={`mt-0.5 shrink-0 transition-transform ${focus ? "cursor-pointer active:scale-95" : "cursor-default text-ink-soft"}`}
-              title={focus ? (focus.completed ? "Mark incomplete" : "Mark completed today") : ""}
+              aria-label={focus ? (focus.completed ? "Mark focus not done" : "Mark focus done") : "No focus set"}
             >
               {focus?.completed ? (
                 <CheckCircle2 size={18} className="text-status-success-text" />
@@ -106,12 +103,12 @@ export function NextSessionFocusCard({
                 </span>
                 {focus && (
                   <span className="text-[10px] text-ink-soft">
-                    (Set by {focus.assigned_by})
+                    (Set by {setByLabel}{focus.source === "skill_library" ? " from the skill library" : ""})
                   </span>
                 )}
                 {focus?.completed && (
                   <span className="text-[10px] font-bold text-status-success-text bg-status-success-bg px-1.5 py-0.2 rounded border border-status-success-border">
-                    Completed today!
+                    Done!
                   </span>
                 )}
               </div>
@@ -126,7 +123,9 @@ export function NextSessionFocusCard({
                 </p>
               ) : (
                 <p className="text-xs text-ink-soft mt-0.5">
-                  No focus set for next practice. Turn a coach cue or technique note into 1 small goal!
+                  {focusQ.isLoading
+                    ? "Loading…"
+                    : "No focus set for next practice. Turn a coach cue or technique note into 1 small goal!"}
                 </p>
               )}
             </div>
@@ -166,20 +165,23 @@ export function NextSessionFocusCard({
       <Sheet
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={playerName ? `Set Next Focus for ${playerName}` : "Next Session Focus"}
+        title={playerName && isStaff ? `Set Next Focus for ${playerName}` : "Next Session Focus"}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <p className="text-xs text-ink-soft">
             Keep it small and concrete: 1 specific cue or habit to concentrate on during today's drills and matches.
+            {isStaff && " Your name is shown as the coach who set it."}
           </p>
 
           <div>
-            <label className="text-xs font-semibold text-ink-soft block mb-1">
+            <label htmlFor="next-focus-text" className="text-xs font-semibold text-ink-soft block mb-1">
               Focus Statement <span className="text-status-danger-text">*</span>
             </label>
             <textarea
+              id="next-focus-text"
               required
               rows={3}
+              maxLength={300}
               value={customText}
               onChange={(e) => setCustomText(e.target.value)}
               placeholder="e.g. Keep racket head above tape level when waiting at the net."
@@ -187,22 +189,9 @@ export function NextSessionFocusCard({
             />
           </div>
 
-          {isStaff && (
-            <div>
-              <label className="text-xs font-semibold text-ink-soft block mb-1">Assigned By (Coach Name)</label>
-              <input
-                type="text"
-                value={assignedBy}
-                onChange={(e) => setAssignedBy(e.target.value)}
-                placeholder="e.g. Coach Varla"
-                className="w-full text-xs rounded-lg border border-line bg-surface px-3 py-2 text-ink"
-              />
-            </div>
-          )}
-
           <div className="space-y-2 pt-2">
-            <Button type="submit" className="w-full">
-              Save Focus
+            <Button type="submit" className="w-full" disabled={mut.set.isPending}>
+              {mut.set.isPending ? "Saving…" : "Save Focus"}
             </Button>
 
             {onOpenSkills && (

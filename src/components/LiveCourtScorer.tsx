@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Play, RotateCcw, Trophy, Check, Pencil, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
-import { Avatar, Button, Card, ConfirmDialog, Field, Select, Sheet, cx } from "./ui";
+import { Avatar, Button, Card, ConfirmDialog, Field, Select, Sheet, cx, today } from "./ui";
 import { CATEGORIES, isSingles, slotGenders, type Category } from "../lib/scores";
 import type { Member } from "../lib/types";
 import type { MatchInput } from "../lib/api";
+import { clearLiveScore, loadLiveScore, saveLiveScore } from "../lib/liveScore";
 
 export function LiveCourtScorer({
   open,
@@ -19,27 +20,48 @@ export function LiveCourtScorer({
   onSaveMatch: (m: MatchInput) => Promise<unknown>;
   busy: boolean;
 }) {
-  const [step, setStep] = useState<"setup" | "scoring" | "finished">("setup");
-  const [category, setCategory] = useState<Category>("MS");
-  const [targetPoints, setTargetPoints] = useState<number>(21);
-  const [isCustomPoints, setIsCustomPoints] = useState<boolean>(false);
-  const [enableDeuce, setEnableDeuce] = useState<boolean>(true);
+  // A match in progress survives a refresh, a locked screen or closing the scorer.
+  const [saved] = useState(loadLiveScore);
+  const [step, setStep] = useState<"setup" | "scoring" | "finished">(saved?.step ?? "setup");
+  const [category, setCategory] = useState<Category>(saved?.category ?? "MS");
+  const [targetPoints, setTargetPoints] = useState<number>(saved?.targetPoints ?? 21);
+  const [isCustomPoints, setIsCustomPoints] = useState<boolean>(saved?.isCustomPoints ?? false);
+  const [enableDeuce, setEnableDeuce] = useState<boolean>(saved?.enableDeuce ?? true);
   const [editingTargetDuringGame, setEditingTargetDuringGame] = useState<boolean>(false);
-  const [matchFormat, setMatchFormat] = useState<"best_of_3" | "1_set" | "best_of_5">("best_of_3");
-  const [slots, setSlots] = useState<(string | null)[]>([null, null, null, null]);
+  const [matchFormat, setMatchFormat] = useState<"best_of_3" | "1_set" | "best_of_5">(saved?.matchFormat ?? "best_of_3");
+  const [slots, setSlots] = useState<(string | null)[]>(saved?.slots ?? [null, null, null, null]);
+  const [playedOn, setPlayedOn] = useState(saved?.playedOn ?? today());
 
   // Scoring state
-  const [currentGame, setCurrentGame] = useState(1);
-  const [scoreA, setScoreA] = useState(0);
-  const [scoreB, setScoreB] = useState(0);
-  const [gamesHistory, setGamesHistory] = useState<string[]>([]);
-  const [winsA, setWinsA] = useState(0);
-  const [winsB, setWinsB] = useState(0);
-  const [scoreLog, setScoreLog] = useState<{ a: number; b: number }[]>([]);
+  const [currentGame, setCurrentGame] = useState(saved?.currentGame ?? 1);
+  const [scoreA, setScoreA] = useState(saved?.scoreA ?? 0);
+  const [scoreB, setScoreB] = useState(saved?.scoreB ?? 0);
+  const [gamesHistory, setGamesHistory] = useState<string[]>(saved?.gamesHistory ?? []);
+  const [winsA, setWinsA] = useState(saved?.winsA ?? 0);
+  const [winsB, setWinsB] = useState(saved?.winsB ?? 0);
+  const [scoreLog, setScoreLog] = useState<{ a: number; b: number }[]>(saved?.scoreLog ?? []);
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmFinish, setConfirmFinish] = useState(false);
-  const [endsSwapped, setEndsSwapped] = useState(false);
-  const [servingSide, setServingSide] = useState<"A" | "B">("A");
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [endsSwapped, setEndsSwapped] = useState(saved?.endsSwapped ?? false);
+  const [servingSide, setServingSide] = useState<"A" | "B">(saved?.servingSide ?? "A");
+
+  useEffect(() => {
+    if (step === "setup") {
+      clearLiveScore();
+      return;
+    }
+    saveLiveScore({
+      step, category, targetPoints, isCustomPoints, enableDeuce, matchFormat, slots, playedOn,
+      currentGame, scoreA, scoreB, gamesHistory, winsA, winsB, scoreLog, endsSwapped, servingSide,
+    });
+  }, [step, category, targetPoints, isCustomPoints, enableDeuce, matchFormat, slots, playedOn,
+    currentGame, scoreA, scoreB, gamesHistory, winsA, winsB, scoreLog, endsSwapped, servingSide]);
+
+  const close = () => {
+    if (step === "scoring") toast.info("Match paused. Open the scorer again to carry on.");
+    onClose();
+  };
 
   const vibrate = (pattern: number | number[] = 35) => {
     try {
@@ -87,6 +109,9 @@ export function LiveCourtScorer({
     setWinsB(0);
     setScoreLog([]);
     setCurrentGame(1);
+    setEndsSwapped(false);
+    setServingSide("A");
+    setPlayedOn(today());
     setStep("scoring");
   };
 
@@ -163,7 +188,7 @@ export function LiveCourtScorer({
     const winnerSide = winsA > winsB ? 1 : 2;
     try {
       await onSaveMatch({
-        playedOn: new Date().toISOString().slice(0, 10),
+        playedOn,
         category,
         slots: singles ? [slots[0], null, slots[2], null] : slots,
         games: gamesHistory,
@@ -178,7 +203,7 @@ export function LiveCourtScorer({
   };
 
   return (
-    <Sheet open={open} onClose={onClose} title="Live Court Scoreboard">
+    <Sheet open={open} onClose={close} title="Live Court Scoreboard" fullScreen>
       <div className="space-y-4">
         {step === "setup" && (
           <div className="space-y-4">
@@ -577,7 +602,8 @@ export function LiveCourtScorer({
                     <span>Undo point</span>
                   </button>
 
-                  {gamesHistory.length > 0 && (
+                  {/* Only when someone is ahead: a level score has no winner to record. */}
+                  {gamesHistory.length > 0 && winsA !== winsB && (
                     <button
                       type="button"
                       onClick={() => setConfirmFinish(true)}
@@ -622,14 +648,7 @@ export function LiveCourtScorer({
                 {busy ? "Saving match…" : "Save to Camp Standings"}
               </Button>
 
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setStep("setup");
-                  onClose();
-                }}
-              >
+              <Button variant="ghost" size="sm" onClick={() => setConfirmDiscard(true)}>
                 Discard
               </Button>
             </div>
@@ -663,6 +682,21 @@ export function LiveCourtScorer({
           setStep("finished");
         }}
         onCancel={() => setConfirmFinish(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmDiscard}
+        title="Discard this match?"
+        message="The result won't be saved and the score can't be recovered."
+        confirmLabel="Discard match"
+        cancelLabel="Keep it"
+        tone="danger"
+        onConfirm={() => {
+          setConfirmDiscard(false);
+          setStep("setup");
+          onClose();
+        }}
+        onCancel={() => setConfirmDiscard(false)}
       />
     </Sheet>
   );

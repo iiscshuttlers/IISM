@@ -1,13 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Check, Package, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Badge, Button, Card, Field, Input, Select, Sheet } from "./ui";
-import {
-  getEquipment,
-  saveEquipmentItem,
-  deleteEquipmentItem,
-  type EquipmentItem,
-} from "../lib/campExtended";
+import { Badge, Button, Card, ConfirmDialog, Field, Input, Select, Sheet } from "./ui";
+import { useSession } from "../lib/session";
+import { errorText } from "../lib/supabase";
+import { useEquipment, useEquipmentMutations, type EquipmentItem } from "../lib/sharedData";
 import type { Member } from "../lib/types";
 
 export function EquipmentTrackerModal({
@@ -21,10 +18,16 @@ export function EquipmentTrackerModal({
   onClose: () => void;
   players: Member[];
 }) {
-  const [items, setItems] = useState<EquipmentItem[]>(() => getEquipment(campId));
+  // Everyone sees the camp's gear; coaches and the admin manage it.
+  const canEdit = useSession().isStaff;
+  const equipment = useEquipment(open ? campId : undefined); // only fetch while the sheet is open
+  const mut = useEquipmentMutations(campId);
+  const items = equipment.data ?? [];
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<EquipmentItem | null>(null);
+  const onErr = (e: unknown) => toast.error(errorText(e));
 
   // Form
   const [name, setName] = useState("");
@@ -34,38 +37,43 @@ export function EquipmentTrackerModal({
   const [borrowedBy, setBorrowedBy] = useState<string>("");
   const [notes, setNotes] = useState("");
 
-  const reload = () => setItems(getEquipment(campId));
-
-  useEffect(() => {
-    if (open) reload();
-  }, [open, campId]);
-
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+    const wasEditing = !!editingId;
+    const previous = items.find((it) => it.id === editingId);
+    const lending = status === "borrowed";
 
-    saveEquipmentItem(
-      campId,
+    mut.save.mutate(
       {
+        id: editingId ?? undefined,
         name: name.trim(),
         category,
         quantity,
         status,
-        borrowed_by: status === "borrowed" ? borrowedBy || null : null,
-        borrowed_at: status === "borrowed" ? new Date().toISOString() : null,
+        borrowed_by: lending ? borrowedBy || null : null,
+        // Keep the original check-out time when editing an item that's still with the same person.
+        borrowed_at: lending
+          ? previous?.borrowed_by === (borrowedBy || null) && previous?.borrowed_at
+            ? previous.borrowed_at
+            : new Date().toISOString()
+          : null,
         notes: notes.trim() || null,
       },
-      editingId || undefined
+      {
+        onSuccess: () => {
+          setAdding(false);
+          setEditingId(null);
+          setName("");
+          setQuantity(1);
+          setStatus("available");
+          setBorrowedBy("");
+          setNotes("");
+          toast.success(wasEditing ? "Equipment item updated" : "Equipment item added");
+        },
+        onError: onErr,
+      },
     );
-
-    setAdding(false);
-    setEditingId(null);
-    setName("");
-    setQuantity(1);
-    setBorrowedBy("");
-    setNotes("");
-    reload();
-    toast.success(editingId ? "Equipment item updated" : "Equipment item added");
   };
 
   const handleEdit = (it: EquipmentItem) => {
@@ -80,9 +88,9 @@ export function EquipmentTrackerModal({
   };
 
   const handleQuickReturn = (it: EquipmentItem) => {
-    saveEquipmentItem(
-      campId,
+    mut.save.mutate(
       {
+        id: it.id,
         name: it.name,
         category: it.category,
         quantity: it.quantity,
@@ -91,16 +99,15 @@ export function EquipmentTrackerModal({
         borrowed_at: null,
         notes: it.notes,
       },
-      it.id
+      { onSuccess: () => toast.success(`${it.name} marked returned`), onError: onErr },
     );
-    reload();
-    toast.success(`${it.name} marked returned`);
   };
 
-  const handleDelete = (id: string) => {
-    deleteEquipmentItem(campId, id);
-    reload();
-    toast.success("Equipment item removed");
+  const handleDelete = () => {
+    if (!deleting) return;
+    const it = deleting;
+    setDeleting(null);
+    mut.remove.mutate(it.id, { onSuccess: () => toast.success(`${it.name} removed`), onError: onErr });
   };
 
   const memberMap = new Map(players.map((p) => [p.id, p.full_name]));
@@ -123,14 +130,14 @@ export function EquipmentTrackerModal({
               {items.length} total items · {borrowedCount} checked out · {needsReplacementCount} needs replacement
             </p>
           </div>
-          {!adding && (
+          {canEdit && !adding && (
             <Button size="sm" onClick={() => { setEditingId(null); setName(""); setAdding(true); }}>
               <Plus size={14} /> Add gear
             </Button>
           )}
         </div>
 
-        {adding && (
+        {canEdit && adding && (
           <form onSubmit={handleSave} className="p-3.5 rounded-xl border border-brand/30 bg-surface-2/60 space-y-3">
             <h4 className="text-xs font-bold text-ink">{editingId ? "Edit Equipment" : "Add Camp Equipment"}</h4>
             <Field label="Item name">
@@ -191,7 +198,9 @@ export function EquipmentTrackerModal({
               <Button type="button" variant="ghost" size="sm" onClick={() => { setAdding(false); setEditingId(null); }}>
                 Cancel
               </Button>
-              <Button type="submit" size="sm">Save gear</Button>
+              <Button type="submit" size="sm" disabled={mut.save.isPending}>
+                {mut.save.isPending ? "Saving…" : "Save gear"}
+              </Button>
             </div>
           </form>
         )}
@@ -216,9 +225,15 @@ export function EquipmentTrackerModal({
 
         {/* Equipment list */}
         <div className="space-y-2">
-          {filtered.length === 0 ? (
+          {equipment.isLoading ? (
+            <p className="text-xs text-ink-soft text-center py-6">Loading…</p>
+          ) : filtered.length === 0 ? (
             <p className="text-xs text-ink-soft text-center py-6 border border-dashed border-line rounded-lg">
-              No equipment found in this category.
+              {items.length === 0
+                ? canEdit
+                  ? "No gear listed yet. Tap Add gear to start the camp inventory."
+                  : "Your coaches haven't listed any camp gear yet."
+                : "No equipment found in this category."}
             </p>
           ) : (
             filtered.map((it) => {
@@ -257,24 +272,26 @@ export function EquipmentTrackerModal({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
-                      {isBorrowed && (
-                        <Button size="sm" variant="secondary" onClick={() => handleQuickReturn(it)}>
-                          <Check size={12} /> Return
+                    {canEdit && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        {isBorrowed && (
+                          <Button size="sm" variant="secondary" onClick={() => handleQuickReturn(it)} disabled={mut.save.isPending}>
+                            <Check size={12} /> Return
+                          </Button>
+                        )}
+                        <Button size="sm" variant="ghost" className="!p-1 text-ink-soft" onClick={() => handleEdit(it)}>
+                          Edit
                         </Button>
-                      )}
-                      <Button size="sm" variant="ghost" className="!p-1 text-ink-soft" onClick={() => handleEdit(it)}>
-                        Edit
-                      </Button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(it.id)}
-                        className="text-ink-soft hover:text-red-600 p-1 transition-colors"
-                        title="Delete item"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                        <button
+                          type="button"
+                          onClick={() => setDeleting(it)}
+                          className="text-ink-soft hover:text-red-600 p-1 transition-colors"
+                          aria-label={`Delete ${it.name}`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </Card>
               );
@@ -282,6 +299,15 @@ export function EquipmentTrackerModal({
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!deleting}
+        title={`Remove ${deleting?.name ?? "this item"}?`}
+        message="It disappears from the camp inventory for everyone."
+        confirmLabel="Remove"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleting(null)}
+      />
     </Sheet>
   );
 }

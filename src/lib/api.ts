@@ -201,6 +201,17 @@ export function useTrainingMutations(campId: string) {
         must(await supabase.from("sessions").insert({ camp_id: campId, ...s }).select("id").single()) as { id: string },
       onSuccess: () => inv("sessions"),
     }),
+    /** The day's first session, created only if there isn't one yet. Safe when several phones
+     *  check in at the same moment (the database serialises them). */
+    ensureSession: useMutation({
+      mutationFn: async (s: { session_date: string; title: string; focus: string; notes?: string; duration_min?: number | null }) =>
+        ({
+          id: must(await supabase.rpc("ensure_session", {
+            p_camp: campId, p_day: s.session_date, p_title: s.title, p_focus: s.focus, p_duration_min: s.duration_min ?? null,
+          })) as string,
+        }),
+      onSuccess: () => inv("sessions"),
+    }),
     updateSession: useMutation({
       mutationFn: async ({ id, ...s }: { id: string; title: string; focus: string; notes: string; duration_min?: number | null }) =>
         must(await supabase.from("sessions").update(s).eq("id", id)),

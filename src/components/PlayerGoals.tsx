@@ -1,13 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { CheckCircle2, Clock, Plus, Target, Trash2, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
-import { Button, Card, Field, Input, Select, Textarea, cx, fmtDate } from "./ui";
-import {
-  getPlayerGoals,
-  savePlayerGoal,
-  deletePlayerGoal,
-  type PlayerGoal,
-} from "../lib/campExtended";
+import { Button, Card, ConfirmDialog, Field, Input, Select, Textarea, cx, fmtDate } from "./ui";
+import { errorText } from "../lib/supabase";
+import { useGoalMutations, usePlayerGoals, type PlayerGoal } from "../lib/sharedData";
 
 export function PlayerGoalsSection({
   campId,
@@ -20,9 +16,13 @@ export function PlayerGoalsSection({
   isCoach: boolean;
   playerName?: string;
 }) {
-  const [goals, setGoals] = useState<PlayerGoal[]>(() => getPlayerGoals(campId, personId));
+  const goalsQ = usePlayerGoals(campId, personId);
+  const mut = useGoalMutations(campId);
+  const goals = goalsQ.data ?? [];
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<PlayerGoal | null>(null);
+  const onErr = (e: unknown) => toast.error(errorText(e));
 
   // Form state
   const [title, setTitle] = useState("");
@@ -31,39 +31,36 @@ export function PlayerGoalsSection({
   const [status, setStatus] = useState<PlayerGoal["status"]>("in_progress");
   const [coachFeedback, setCoachFeedback] = useState("");
 
-  const reload = () => setGoals(getPlayerGoals(campId, personId));
-
-  useEffect(() => {
-    reload();
-    const handleSync = () => reload();
-    window.addEventListener("iism_extended_change", handleSync);
-    return () => window.removeEventListener("iism_extended_change", handleSync);
-  }, [campId, personId]);
-
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
+    const wasEditing = !!editingId;
+    const current = goals.find((g) => g.id === editingId);
 
-    savePlayerGoal(
-      campId,
+    mut.save.mutate(
       {
+        id: editingId ?? undefined,
         person_id: personId,
         title: title.trim(),
         category,
         target_date: targetDate || null,
         status,
-        coach_feedback: coachFeedback.trim() || null,
+        // Coach-only; the database keeps the existing feedback when a player saves.
+        coach_feedback: isCoach ? coachFeedback.trim() || null : current?.coach_feedback ?? null,
       },
-      editingId || undefined
+      {
+        onSuccess: () => {
+          setAdding(false);
+          setEditingId(null);
+          setTitle("");
+          setTargetDate("");
+          setStatus("in_progress");
+          setCoachFeedback("");
+          toast.success(wasEditing ? "Goal updated" : "Goal saved");
+        },
+        onError: onErr,
+      },
     );
-
-    setAdding(false);
-    setEditingId(null);
-    setTitle("");
-    setTargetDate("");
-    setCoachFeedback("");
-    reload();
-    toast.success(editingId ? "Goal updated" : "Goal saved");
   };
 
   const handleEdit = (g: PlayerGoal) => {
@@ -76,10 +73,11 @@ export function PlayerGoalsSection({
     setAdding(true);
   };
 
-  const handleDelete = (id: string) => {
-    deletePlayerGoal(campId, id);
-    reload();
-    toast.success("Goal deleted");
+  const handleDelete = () => {
+    if (!deleting) return;
+    const id = deleting.id;
+    setDeleting(null);
+    mut.remove.mutate(id, { onSuccess: () => toast.success("Goal deleted"), onError: onErr });
   };
 
   return (
@@ -150,12 +148,16 @@ export function PlayerGoalsSection({
             <Button type="button" variant="ghost" size="sm" onClick={() => { setAdding(false); setEditingId(null); }}>
               Cancel
             </Button>
-            <Button type="submit" size="sm">Save Goal</Button>
+            <Button type="submit" size="sm" disabled={mut.save.isPending}>
+              {mut.save.isPending ? "Saving…" : "Save Goal"}
+            </Button>
           </div>
         </form>
       )}
 
-      {goals.length === 0 ? (
+      {goalsQ.isLoading ? (
+        <p className="text-xs text-ink-soft text-center py-4">Loading goals…</p>
+      ) : goals.length === 0 ? (
         <p className="text-xs text-ink-soft text-center py-4 border border-dashed border-line rounded-lg">
           No goals logged yet. Setting 1–3 clear goals helps coaches direct focus during practice.
         </p>
@@ -204,7 +206,7 @@ export function PlayerGoalsSection({
                     <Button size="sm" variant="ghost" className="!p-1 text-ink-soft hover:text-brand" onClick={() => handleEdit(g)}>
                       Edit
                     </Button>
-                    <button type="button" onClick={() => handleDelete(g.id)} className="p-1 text-ink-soft hover:text-red-600 transition-colors">
+                    <button type="button" onClick={() => setDeleting(g)} aria-label={`Delete goal ${g.title}`} className="p-1 text-ink-soft hover:text-red-600 transition-colors">
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -224,6 +226,15 @@ export function PlayerGoalsSection({
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleting}
+        title="Delete this goal?"
+        message={deleting ? `"${deleting.title}" and any coach feedback on it will be removed.` : undefined}
+        confirmLabel="Delete goal"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleting(null)}
+      />
     </div>
   );
 }

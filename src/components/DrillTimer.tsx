@@ -22,6 +22,42 @@ function playBeep(freq = 880, duration = 0.15) {
   }
 }
 
+function playWhistle() {
+  try {
+    const AudioContext = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc1.type = "sine";
+    osc2.type = "sine";
+    osc1.frequency.setValueAtTime(2400, ctx.currentTime);
+    osc2.frequency.setValueAtTime(2550, ctx.currentTime);
+    osc1.frequency.exponentialRampToValueAtTime(2700, ctx.currentTime + 0.15);
+    osc2.frequency.exponentialRampToValueAtTime(2850, ctx.currentTime + 0.15);
+
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc1.start();
+    osc2.start();
+    osc1.stop(ctx.currentTime + 0.35);
+    osc2.stop(ctx.currentTime + 0.35);
+
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate([150, 50, 200]);
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export function DrillTimerModal({
   open,
   onClose,
@@ -59,18 +95,18 @@ export function DrillTimerModal({
           // Phase transition
           if (phase === "work") {
             if (currentSet >= totalSets) {
-              if (soundEnabled) playBeep(523, 0.4); // High finish chime
+              if (soundEnabled) playWhistle();
               setActive(false);
               setPhase("finished");
               return 0;
             } else {
-              if (soundEnabled) playBeep(440, 0.2); // Rest beep
+              if (soundEnabled) playBeep(520, 0.25);
               setPhase("rest");
               return restSec;
             }
           } else {
             // Rest to Work
-            if (soundEnabled) playBeep(880, 0.25); // Work beep
+            if (soundEnabled) playWhistle();
             setPhase("work");
             setCurrentSet((s) => s + 1);
             return workSec;

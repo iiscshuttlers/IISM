@@ -3,12 +3,13 @@ import { Link, useLocation } from "wouter";
 import {
   Plus, Flame, Check, LineChart, Radio, Sparkles, Calendar,
   UserCheck, Clock, UserX, Users, Play, Zap, Megaphone,
-  Package, HeartPulse, History, BookOpen, TrendingUp, MessageSquare
+  Package, HeartPulse, History, BookOpen, TrendingUp, MessageSquare,
+  Search, Share2
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
 import {
-  useAttendance, useDrills, useMatches, useMatchMutations, useMembers,
+  useAssessments, useAttendance, useDrills, useMatches, useMatchMutations, useMembers,
   useSessions, useStandings, useTrainingMutations,
 } from "../lib/api";
 import { MatchCard } from "../components/MatchCard";
@@ -27,6 +28,11 @@ import { SkillLibrarySheet } from "../components/SkillLibrary";
 import { WeatherVenueBanner } from "../components/WeatherVenuePlan";
 import { NextSessionFocusCard } from "../components/NextSessionFocusCard";
 import { CampCalendarExportModal } from "../components/CalendarExport";
+import { LiveCourtBoard } from "../components/LiveCourtBoard";
+import { QuickCommandPalette } from "../components/QuickCommandPalette";
+import { PlayerDetailSheet } from "../components/PlayerDetail";
+import { shareDailyScheduleOnWhatsApp } from "../lib/whatsappShare";
+import { getWeatherVenuePlan } from "../lib/campExtended";
 import { Avatar, Badge, Button, Card, Empty, fmtDate, today } from "../components/ui";
 import { DRILL_TYPES } from "../lib/types";
 import { WellnessCheckin } from "../components/WellnessCheckin";
@@ -45,11 +51,14 @@ export default function TodayPage() {
   const [reflectionOpen, setReflectionOpen] = useState(false);
   const [skillLibraryOpen, setSkillLibraryOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
 
   const sessions = useSessions(campId);
   const todays = (sessions.data ?? []).filter((x) => x.session_date === today());
   const drills = useDrills(todays.map((x) => x.id));
   const attendance = useAttendance(todays.map((x) => x.id));
+  const assessments = useAssessments(campId, s.isStaff);
   const trainingMut = useTrainingMutations(campId);
   const matchMut = useMatchMutations(campId);
 
@@ -257,6 +266,16 @@ export default function TodayPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCommandOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-xl border border-line bg-surface hover:bg-surface-2 text-ink-soft hover:text-ink transition shadow-2xs"
+            title="Quick search players, techniques, pages (⌘K or /)"
+          >
+            <Search size={14} className="text-brand" />
+            <span className="hidden sm:inline">Search</span>
+            <kbd className="hidden sm:inline-block font-mono text-[10px] bg-surface-2 border border-line px-1 rounded text-ink-soft">⌘K</kbd>
+          </button>
           <GuideButton />
           <Link href="/matches?new=1">
             <Button size="sm">
@@ -276,6 +295,82 @@ export default function TodayPage() {
 
       {/* Weather & Venue-Aware Planning Banner */}
       <WeatherVenueBanner campId={campId} isStaff={s.isStaff} />
+
+      {/* Role-Tailored Hub: Athlete View */}
+      {isPlayer && (
+        <Card className="bg-gradient-to-r from-teal-500/10 via-brand-pale/40 to-surface border-brand/30 p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <Avatar name={myName || "Athlete"} size="md" />
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="font-bold text-base text-ink">Welcome back, {myName || "Athlete"}</h2>
+                  <Badge tone={myTodayAtt?.status === "present" ? "good" : myTodayAtt?.status === "late" ? "warn" : "neutral"}>
+                    {myTodayAtt?.status === "present" ? "On Court" : myTodayAtt?.status === "late" ? "Arriving Late" : "Check-in Pending"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-ink-soft">
+                  {myTodayAtt?.status === "present"
+                    ? "You are checked in for today's session and available for matches."
+                    : "Tap 'Present' below when you reach the badminton hall."}
+                </p>
+              </div>
+            </div>
+            {mine && (
+              <div className="flex items-center gap-3 bg-surface/80 rounded-xl px-3 py-1.5 border border-line self-start sm:self-auto">
+                <div className="text-center">
+                  <p className="text-xs text-ink-soft">Rating</p>
+                  <p className="text-sm font-bold text-brand">{mine.rating}</p>
+                </div>
+                {showRank && rank && (
+                  <div className="text-center border-l border-line pl-3">
+                    <p className="text-xs text-ink-soft">Rank</p>
+                    <p className="text-sm font-bold text-ink">#{rank}</p>
+                  </div>
+                )}
+                <div className="text-center border-l border-line pl-3">
+                  <p className="text-xs text-ink-soft">Form</p>
+                  <p className="text-sm font-bold font-mono text-ink">{mine.form || "—"}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* Role-Tailored Hub: Staff / Admin View */}
+      {s.isStaff && (
+        <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-surface-2 border border-line">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-brand" />
+            <span className="text-xs font-semibold text-ink">
+              {s.isAdmin ? "Admin & Coaching Command" : "Coaching Staff Hub"}
+            </span>
+            <span className="text-xs text-ink-soft">
+              · {presentCount}/{playerMembers.length} athletes present
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                shareDailyScheduleOnWhatsApp({
+                  campName: s.camp?.name ?? "IISc Badminton Camp",
+                  session: todaySession,
+                  weatherPlan: getWeatherVenuePlan(campId),
+                  presentCount,
+                  totalSquad: playerMembers.length,
+                });
+              }}
+              className="!text-emerald-700 dark:!text-emerald-400 !border-emerald-600/30 !bg-emerald-500/10 hover:!bg-emerald-500/20 text-xs py-1 h-auto"
+            >
+              <Share2 size={13} />
+              <span>WhatsApp Briefing</span>
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Next Session Focus (Small, trackable focus from coach or self) */}
       {s.meId && (
@@ -360,6 +455,16 @@ export default function TodayPage() {
           </div>
         </Link>
       </div>
+
+      {/* Live Court Board (Courts 1–4 Grid) */}
+      <LiveCourtBoard
+        campId={campId}
+        isStaff={s.isStaff}
+        players={playerMembers}
+        onRecordMatchOnCourt={(courtNum) => {
+          setLoc(`/matches?new=1&court=${courtNum}`);
+        }}
+      />
 
       {/* Camp Utility Shortcuts */}
       <div className="flex flex-wrap items-center gap-2">
@@ -773,6 +878,27 @@ export default function TodayPage() {
         sessions={sessions.data ?? []}
         matches={matches.data ?? []}
         members={members.data ?? []}
+      />
+
+      {/* Quick Command Palette (⌘K) */}
+      <QuickCommandPalette
+        open={commandOpen}
+        onClose={() => setCommandOpen(false)}
+        members={members.data ?? []}
+        onSelectPlayer={(id) => setSelectedPersonId(id)}
+      />
+
+      {/* Quick Player Detail Inspection Sheet */}
+      <PlayerDetailSheet
+        campId={campId}
+        personId={selectedPersonId}
+        onClose={() => setSelectedPersonId(null)}
+        members={members.data ?? []}
+        standings={standings.data ?? []}
+        matches={matches.data ?? []}
+        attendance={attendance.data ?? []}
+        assessments={assessments.data ?? []}
+        isStaff={s.isStaff}
       />
     </div>
   );

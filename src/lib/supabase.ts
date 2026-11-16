@@ -45,6 +45,7 @@ const FRIENDLY: Record<string, string> = {
   has_matches: "This person has matches. Void them first or keep them on the roster.",
   cannot_remove_self: "You can't remove yourself.",
   cannot_demote_self: "You can't remove your own admin role.",
+  invalid_day: "Check the date on this phone and try again.",
 };
 
 export function errorText(e: unknown): string {
@@ -54,6 +55,7 @@ export function errorText(e: unknown): string {
     return m ? `Select exactly ${m[2]} players before locking (${m[1]} selected).` : "Selected count doesn't match the squad size.";
   }
   if (/duplicate key.*email/i.test(msg)) return "That email is already used by another profile.";
+  if (/row-level security/i.test(msg)) return FRIENDLY.forbidden;
   for (const key of Object.keys(FRIENDLY)) if (msg.startsWith(key)) return FRIENDLY[key];
   return msg;
 }

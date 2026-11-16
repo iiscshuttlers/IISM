@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { Session as AuthSession } from "@supabase/supabase-js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { outbox } from "./outbox";
+import { clearLiveScore } from "./liveScore";
 import { must, supabase } from "./supabase";
 import { useCamps, useIsSiteAdmin, useRole } from "./api";
 import type { Camp, Role } from "./types";
@@ -83,6 +84,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       await supabase.auth.signOut();
       // Nothing from this account stays on a shared phone.
       outbox.clear();
+      clearLiveScore();
       qc.clear();
       try { localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
     },

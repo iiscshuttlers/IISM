@@ -99,6 +99,16 @@ export interface NextSessionFocus {
   completed_at: string | null;
 }
 
+export interface CourtAllocation {
+  court_num: number; // 1, 2, 3, 4
+  status: "match" | "drill" | "warmup" | "open";
+  title: string;
+  subtitle?: string;
+  participants: string[]; // person_ids
+  start_time?: string;
+  updated_at: string;
+}
+
 export interface PlayerMatchHistoryItem {
   matchId: string;
   playedOn: string;
@@ -782,7 +792,50 @@ export function computePlayerRatingHistory(
   return history;
 }
 
-// ───────── 11. Full Camp Backup Export ─────────
+// ───────── 11. Live Court Allocations (Courts 1–4) ─────────
+
+export const DEFAULT_COURT_ALLOCATIONS: CourtAllocation[] = [
+  { court_num: 1, status: "open", title: "Court 1 Available", participants: [], updated_at: "" },
+  { court_num: 2, status: "open", title: "Court 2 Available", participants: [], updated_at: "" },
+  { court_num: 3, status: "open", title: "Court 3 Available", participants: [], updated_at: "" },
+  { court_num: 4, status: "open", title: "Court 4 Available", participants: [], updated_at: "" },
+];
+
+export function getCourtAllocations(campId: string): CourtAllocation[] {
+  const stored = getStorage<CourtAllocation[]>(`${STORAGE_PREFIX}courts_${campId}`, []);
+  const map = new Map(stored.map((c) => [c.court_num, c]));
+  return [1, 2, 3, 4].map((num) => map.get(num) ?? {
+    court_num: num,
+    status: "open",
+    title: `Court ${num} Available`,
+    participants: [],
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export function saveCourtAllocation(campId: string, alloc: CourtAllocation): CourtAllocation {
+  const key = `${STORAGE_PREFIX}courts_${campId}`;
+  const existing = getCourtAllocations(campId);
+  const updatedItem: CourtAllocation = {
+    ...alloc,
+    updated_at: new Date().toISOString(),
+  };
+  const updatedAll = existing.map((c) => (c.court_num === alloc.court_num ? updatedItem : c));
+  setStorage(key, updatedAll);
+  return updatedItem;
+}
+
+export function clearCourtAllocation(campId: string, courtNum: number): void {
+  saveCourtAllocation(campId, {
+    court_num: courtNum,
+    status: "open",
+    title: `Court ${courtNum} Available`,
+    participants: [],
+    updated_at: new Date().toISOString(),
+  });
+}
+
+// ───────── 12. Full Camp Backup Export ─────────
 
 export interface CampFullBackup {
   exportDate: string;

@@ -1,13 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { HeartPulse, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Badge, Button, Card, Field, Input, Select, Sheet, Textarea, cx, fmtDate } from "./ui";
-import {
-  getInjuryReports,
-  saveInjuryReport,
-  deleteInjuryReport,
-  type InjuryReport,
-} from "../lib/campExtended";
+import { Badge, Button, Card, ConfirmDialog, Field, Select, Sheet, Input, Textarea, cx, fmtDate } from "./ui";
+import { errorText } from "../lib/supabase";
+import { useInjuryMutations, useInjuryReports, type InjuryReport } from "../lib/sharedData";
 import type { Member } from "../lib/types";
 
 export function InjuryTrackerModal({
@@ -25,11 +21,13 @@ export function InjuryTrackerModal({
   isStaff: boolean;
   players: Member[];
 }) {
-  const [reports, setReports] = useState<InjuryReport[]>(() =>
-    getInjuryReports(campId, isStaff ? undefined : meId || undefined)
-  );
+  // Players get their own reports, coaches everyone's (enforced by the database).
+  const reportsQ = useInjuryReports(open ? campId : undefined);
+  const mut = useInjuryMutations(campId);
+  const reports = reportsQ.data ?? [];
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<InjuryReport | null>(null);
 
   // Form fields
   const [targetPersonId, setTargetPersonId] = useState(meId || "");
@@ -39,37 +37,46 @@ export function InjuryTrackerModal({
   const [status, setStatus] = useState<InjuryReport["status"]>("new");
   const [staffNotes, setStaffNotes] = useState("");
 
-  const reload = () => {
-    setReports(getInjuryReports(campId, isStaff ? undefined : meId || undefined));
-  };
+  const onErr = (e: unknown) => toast.error(errorText(e));
 
-  useEffect(() => {
-    if (open) reload();
-  }, [open, campId, isStaff, meId]);
-
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!notes.trim()) return;
-
-    saveInjuryReport(
-      campId,
-      {
-        person_id: isStaff ? targetPersonId || meId || "" : meId || "",
-        body_part: bodyPart,
-        severity,
-        notes: notes.trim(),
-        status,
-        staff_notes: isStaff ? staffNotes.trim() || null : null,
-      },
-      editingId || undefined
-    );
-
+  const resetForm = () => {
     setAdding(false);
     setEditingId(null);
     setNotes("");
     setStaffNotes("");
-    reload();
-    toast.success(editingId ? "Issue report updated" : "Private issue reported to coaches");
+    setStatus("new");
+  };
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!notes.trim()) return;
+    const personId = isStaff ? targetPersonId || players[0]?.id || meId || "" : meId || "";
+    if (!personId) {
+      toast.error("Pick a player first.");
+      return;
+    }
+    const wasEditing = !!editingId;
+    const current = reports.find((r) => r.id === editingId);
+
+    mut.save.mutate(
+      {
+        id: editingId ?? undefined,
+        person_id: personId,
+        body_part: bodyPart,
+        severity,
+        notes: notes.trim(),
+        // Only coaches set these; the database ignores them from players.
+        status: isStaff ? status : current?.status ?? "new",
+        staff_notes: isStaff ? staffNotes.trim() || null : current?.staff_notes ?? null,
+      },
+      {
+        onSuccess: () => {
+          resetForm();
+          toast.success(wasEditing ? "Report updated" : isStaff ? "Report added" : "Reported privately to your coaches");
+        },
+        onError: onErr,
+      },
+    );
   };
 
   const handleEdit = (r: InjuryReport) => {
@@ -83,10 +90,11 @@ export function InjuryTrackerModal({
     setAdding(true);
   };
 
-  const handleDelete = (id: string) => {
-    deleteInjuryReport(campId, id);
-    reload();
-    toast.success("Record deleted");
+  const handleDelete = () => {
+    if (!deleting) return;
+    const id = deleting.id;
+    setDeleting(null);
+    mut.remove.mutate(id, { onSuccess: () => toast.success("Record deleted"), onError: onErr });
   };
 
   const memberMap = new Map(players.map((p) => [p.id, p.full_name]));
@@ -96,12 +104,12 @@ export function InjuryTrackerModal({
   return (
     <Sheet open={open} onClose={onClose} title="Private Injury &amp; Physical Check">
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-xs text-ink-soft">
               {isStaff
                 ? "Confidential injury board for coaches: review player soreness and assign modified workloads."
-                : "Flag tightness, sprains, or pain privately so your coach can adapt your court time."}
+                : "Flag tightness, sprains, or pain privately. Only you and your coaches can see these reports."}
             </p>
             {isStaff && (
               <p className="text-[11px] font-semibold text-brand mt-0.5">
@@ -110,7 +118,7 @@ export function InjuryTrackerModal({
             )}
           </div>
           {!adding && (
-            <Button size="sm" onClick={() => { setEditingId(null); setNotes(""); setAdding(true); }}>
+            <Button size="sm" onClick={() => { resetForm(); setAdding(true); }}>
               <Plus size={14} /> Flag issue
             </Button>
           )}
@@ -124,7 +132,8 @@ export function InjuryTrackerModal({
 
             {isStaff && (
               <Field label="Player">
-                <Select value={targetPersonId} onChange={(e) => setTargetPersonId(e.target.value)}>
+                <Select value={targetPersonId} disabled={!!editingId} onChange={(e) => setTargetPersonId(e.target.value)}>
+                  <option value="">Select player</option>
                   {players.map((p) => (
                     <option key={p.id} value={p.id}>{p.full_name}</option>
                   ))}
@@ -161,6 +170,7 @@ export function InjuryTrackerModal({
               <Textarea
                 required
                 rows={2}
+                maxLength={1000}
                 placeholder="When did it start? How does it feel when jumping or lunging?"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -179,6 +189,7 @@ export function InjuryTrackerModal({
                 </Field>
                 <Field label="Staff Clinical / Coaching Action">
                   <Input
+                    maxLength={1000}
                     placeholder="e.g. Advised ice & compression; net drills only today"
                     value={staffNotes}
                     onChange={(e) => setStaffNotes(e.target.value)}
@@ -188,18 +199,22 @@ export function InjuryTrackerModal({
             )}
 
             <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="ghost" size="sm" onClick={() => { setAdding(false); setEditingId(null); }}>
+              <Button type="button" variant="ghost" size="sm" onClick={resetForm}>
                 Cancel
               </Button>
-              <Button type="submit" size="sm">Save Report</Button>
+              <Button type="submit" size="sm" disabled={mut.save.isPending}>
+                {mut.save.isPending ? "Saving…" : "Save Report"}
+              </Button>
             </div>
           </form>
         )}
 
         <div className="space-y-2">
-          {reports.length === 0 ? (
+          {reportsQ.isLoading ? (
+            <p className="text-xs text-ink-soft text-center py-6">Loading…</p>
+          ) : reports.length === 0 ? (
             <p className="text-xs text-ink-soft text-center py-6 border border-dashed border-line rounded-lg">
-              No injury reports logged. Everyone is currently fit.
+              {isStaff ? "No injury reports logged. Everyone is currently fit." : "You haven't reported anything. Flag an issue any time something hurts."}
             </p>
           ) : (
             reports.map((r) => {
@@ -241,7 +256,7 @@ export function InjuryTrackerModal({
                           </Badge>
                         </div>
                         <p className="text-xs text-ink-soft mt-1 leading-relaxed">{r.notes}</p>
-                        <p className="text-[10px] text-ink-soft mt-1">Reported {fmtDate(r.reported_at)}</p>
+                        <p className="text-[10px] text-ink-soft mt-1">Reported {fmtDate(r.created_at)}</p>
                       </div>
                     </div>
 
@@ -251,9 +266,9 @@ export function InjuryTrackerModal({
                       </Button>
                       <button
                         type="button"
-                        onClick={() => handleDelete(r.id)}
+                        onClick={() => setDeleting(r)}
                         className="text-ink-soft hover:text-red-600 p-1 transition-colors"
-                        title="Delete record"
+                        aria-label={`Delete ${r.body_part} report`}
                       >
                         <Trash2 size={14} />
                       </button>
@@ -275,6 +290,15 @@ export function InjuryTrackerModal({
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!deleting}
+        title="Delete this report?"
+        message={isStaff ? "The player's report and your follow-up notes are removed for good." : "Your coaches will no longer see it."}
+        confirmLabel="Delete"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleting(null)}
+      />
     </Sheet>
   );
 }

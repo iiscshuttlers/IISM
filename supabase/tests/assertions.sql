@@ -568,4 +568,267 @@ DO $$ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 
+-- 17. (0004) Shared camp features, on a fresh camp so earlier toggles don't interfere.
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+INSERT INTO ids SELECT 'scamp', public.create_camp('Shared', NULL, NULL, 2);
+SELECT public.add_camp_person((SELECT v FROM ids WHERE k='scamp'), 'Coach', 'M', 'coach@x.test', 'coach');
+SELECT public.add_camp_person((SELECT v FROM ids WHERE k='scamp'), 'Arjun', 'M', 'p1@x.test', 'player');
+SELECT public.add_camp_person((SELECT v FROM ids WHERE k='scamp'), 'Bharat', 'M', 'p2@x.test', 'player');
+INSERT INTO ids SELECT 'ocamp', public.create_camp('Other', NULL, NULL, 2);
+INSERT INTO ids SELECT 'osess', public.ensure_session((SELECT v FROM ids WHERE k='ocamp'), current_date, 'Other', NULL, NULL);
+
+-- 17a. ensure_session: concurrent check-ins share one session; bad days and outsiders refused.
+SELECT pg_temp.as_user(:u_p1, 'p1@x.test');
+INSERT INTO ids SELECT 'ssess', public.ensure_session((SELECT v FROM ids WHERE k='scamp'), current_date, 'Today', 'Matchplay', 120);
+DO $$ BEGIN
+  IF public.ensure_session((SELECT v FROM ids WHERE k='scamp'), current_date, 'Again', NULL, NULL)
+     IS DISTINCT FROM (SELECT v FROM ids WHERE k='ssess') THEN
+    RAISE EXCEPTION 'ensure_session created a second session';
+  END IF;
+  IF (SELECT count(*) FROM public.sessions WHERE camp_id = (SELECT v FROM ids WHERE k='scamp')) <> 1 THEN
+    RAISE EXCEPTION 'session count wrong';
+  END IF;
+  IF (SELECT created_by FROM public.sessions WHERE id = (SELECT v FROM ids WHERE k='ssess'))
+     IS DISTINCT FROM (SELECT v FROM ids WHERE k='p1') THEN
+    RAISE EXCEPTION 'ensure_session authorship not stamped';
+  END IF;
+  BEGIN
+    PERFORM public.ensure_session((SELECT v FROM ids WHERE k='scamp'), current_date + 5, 'Future', NULL, NULL);
+    RAISE EXCEPTION 'ensure_session accepted a far-off day';
+  EXCEPTION WHEN raise_exception THEN IF SQLERRM <> 'invalid_day' THEN RAISE; END IF; END;
+  BEGIN
+    PERFORM public.ensure_session((SELECT v FROM ids WHERE k='ocamp'), current_date, 'X', NULL, NULL);
+    RAISE EXCEPTION 'ensure_session in a camp the player is not in';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+
+-- 17b. Announcements: staff post, everyone reads, receipts are personal.
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO public.announcements (camp_id, title, message) VALUES ((SELECT v FROM ids WHERE k='scamp'), 'Hi', 'Player post');
+    RAISE EXCEPTION 'player posted an announcement';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+INSERT INTO public.announcements (camp_id, title, message, priority, created_by)
+VALUES ((SELECT v FROM ids WHERE k='scamp'), 'Court change', 'Evening session on court 3', 'urgent', (SELECT v FROM ids WHERE k='p1'));
+INSERT INTO ids SELECT 'ann', id FROM public.announcements WHERE camp_id = (SELECT v FROM ids WHERE k='scamp');
+DO $$ BEGIN
+  IF (SELECT created_by FROM public.announcements WHERE id = (SELECT v FROM ids WHERE k='ann'))
+     IS DISTINCT FROM (SELECT v FROM ids WHERE k='coach') THEN
+    RAISE EXCEPTION 'announcement author was taken from the client';
+  END IF;
+END $$;
+SELECT pg_temp.as_user(:u_p1, 'p1@x.test');
+INSERT INTO public.announcement_reads (announcement_id, person_id)
+VALUES ((SELECT v FROM ids WHERE k='ann'), (SELECT v FROM ids WHERE k='p1'));
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.announcements WHERE id = (SELECT v FROM ids WHERE k='ann')) THEN
+    RAISE EXCEPTION 'player cannot read announcement';
+  END IF;
+  BEGIN
+    INSERT INTO public.announcement_reads (announcement_id, person_id)
+    VALUES ((SELECT v FROM ids WHERE k='ann'), (SELECT v FROM ids WHERE k='p2'));
+    RAISE EXCEPTION 'player acknowledged for someone else';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  DELETE FROM public.announcements;
+  UPDATE public.announcements SET title = 'Hacked';
+END $$;
+SELECT pg_temp.as_user(:u_p2, 'p2@x.test');
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM public.announcement_reads) THEN RAISE EXCEPTION 'player saw another''s read receipt'; END IF;
+END $$;
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+DO $$ BEGIN
+  IF (SELECT title FROM public.announcements WHERE id = (SELECT v FROM ids WHERE k='ann')) <> 'Court change' THEN
+    RAISE EXCEPTION 'player changed or deleted an announcement';
+  END IF;
+  IF (SELECT count(*) FROM public.announcement_reads WHERE announcement_id = (SELECT v FROM ids WHERE k='ann')) <> 1 THEN
+    RAISE EXCEPTION 'coach cannot see read receipts';
+  END IF;
+END $$;
+
+-- 17c. Injury reports: private to the player and staff; status and staff note are coach-only.
+SELECT pg_temp.as_user(:u_p1, 'p1@x.test');
+INSERT INTO public.injury_reports (camp_id, person_id, body_part, severity, notes, status, staff_notes)
+VALUES ((SELECT v FROM ids WHERE k='scamp'), (SELECT v FROM ids WHERE k='p1'), 'Right Knee', 'mild', 'Sore after lunges',
+        'cleared', 'Self-cleared');
+INSERT INTO ids SELECT 'inj', id FROM public.injury_reports;
+DO $$ BEGIN
+  IF (SELECT status || coalesce(staff_notes, '-') FROM public.injury_reports) <> 'new-' THEN
+    RAISE EXCEPTION 'player set coach-only injury fields';
+  END IF;
+  BEGIN
+    INSERT INTO public.injury_reports (camp_id, person_id, body_part, severity, notes)
+    VALUES ((SELECT v FROM ids WHERE k='scamp'), (SELECT v FROM ids WHERE k='p2'), 'Ankle', 'mild', 'Not mine');
+    RAISE EXCEPTION 'player reported an injury for someone else';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT pg_temp.as_user(:u_p2, 'p2@x.test');
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM public.injury_reports) THEN RAISE EXCEPTION 'player read another''s injury report'; END IF;
+  UPDATE public.injury_reports SET notes = 'tampered';
+  DELETE FROM public.injury_reports;
+END $$;
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+UPDATE public.injury_reports SET status = 'reviewing', staff_notes = 'Ice, net drills only'
+ WHERE id = (SELECT v FROM ids WHERE k='inj');
+SELECT pg_temp.as_user(:u_p1, 'p1@x.test');
+UPDATE public.injury_reports SET notes = 'Better today', status = 'cleared', staff_notes = NULL;
+DO $$ BEGIN
+  IF (SELECT notes || '|' || status || '|' || staff_notes FROM public.injury_reports)
+     <> 'Better today|reviewing|Ice, net drills only' THEN
+    RAISE EXCEPTION 'injury report edit rules wrong: %', (SELECT notes || '|' || status || '|' || staff_notes FROM public.injury_reports);
+  END IF;
+  BEGIN
+    UPDATE public.injury_reports SET person_id = (SELECT v FROM ids WHERE k='p2');
+    RAISE EXCEPTION 'injury report moved to another person';
+  EXCEPTION
+    WHEN raise_exception THEN IF SQLERRM <> 'immutable_person' THEN RAISE; END IF;
+    WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+
+-- 17d. Goals: the player owns them, coach feedback is coach-only.
+INSERT INTO public.player_goals (camp_id, person_id, title, category, coach_feedback)
+VALUES ((SELECT v FROM ids WHERE k='scamp'), (SELECT v FROM ids WHERE k='p1'), 'Faster split step', 'fitness', 'Self praise');
+DO $$ BEGIN
+  IF (SELECT coach_feedback FROM public.player_goals) IS NOT NULL THEN RAISE EXCEPTION 'player wrote coach feedback'; END IF;
+END $$;
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+UPDATE public.player_goals SET coach_feedback = 'Good progress';
+SELECT pg_temp.as_user(:u_p2, 'p2@x.test');
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM public.player_goals) THEN RAISE EXCEPTION 'player read another''s goals'; END IF;
+END $$;
+SELECT pg_temp.as_user(:u_p1, 'p1@x.test');
+DO $$ BEGIN
+  IF (SELECT coach_feedback FROM public.player_goals) IS DISTINCT FROM 'Good progress' THEN
+    RAISE EXCEPTION 'player cannot see coach feedback';
+  END IF;
+END $$;
+
+-- 17e. Next-session focus: who set it is stamped; ticking it off keeps the setter.
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+INSERT INTO public.next_session_focus (camp_id, person_id, focus_text, set_by, completed)
+VALUES ((SELECT v FROM ids WHERE k='scamp'), (SELECT v FROM ids WHERE k='p1'), 'Racket up at the net',
+        (SELECT v FROM ids WHERE k='p2'), true);
+SELECT pg_temp.as_user(:u_p1, 'p1@x.test');
+DO $$ BEGIN
+  IF (SELECT set_by FROM public.next_session_focus) IS DISTINCT FROM (SELECT v FROM ids WHERE k='coach')
+     OR (SELECT completed FROM public.next_session_focus) THEN
+    RAISE EXCEPTION 'focus setter or initial state wrong';
+  END IF;
+  UPDATE public.next_session_focus SET completed = true;
+  IF (SELECT completed_at FROM public.next_session_focus) IS NULL
+     OR (SELECT set_by FROM public.next_session_focus) IS DISTINCT FROM (SELECT v FROM ids WHERE k='coach') THEN
+    RAISE EXCEPTION 'completing the focus lost its setter or time';
+  END IF;
+END $$;
+INSERT INTO public.next_session_focus (camp_id, person_id, focus_text)
+VALUES ((SELECT v FROM ids WHERE k='scamp'), (SELECT v FROM ids WHERE k='p1'), 'Watch the shuttle onto the strings')
+ON CONFLICT (camp_id, person_id) DO UPDATE SET focus_text = EXCLUDED.focus_text, completed = false;
+DO $$ BEGIN
+  IF (SELECT set_by FROM public.next_session_focus) IS DISTINCT FROM (SELECT v FROM ids WHERE k='p1')
+     OR (SELECT completed_at FROM public.next_session_focus) IS NOT NULL THEN
+    RAISE EXCEPTION 'a new focus kept the old setter or completion';
+  END IF;
+END $$;
+SELECT pg_temp.as_user(:u_p2, 'p2@x.test');
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM public.next_session_focus) THEN RAISE EXCEPTION 'player read another''s focus'; END IF;
+END $$;
+
+-- 17f. Reflections: own only; the session must be from the same camp.
+SELECT pg_temp.as_user(:u_p1, 'p1@x.test');
+INSERT INTO public.session_reflections (camp_id, person_id, session_id, went_well, to_work_on, effort_rpe, energy_level)
+VALUES ((SELECT v FROM ids WHERE k='scamp'), (SELECT v FROM ids WHERE k='p1'), (SELECT v FROM ids WHERE k='ssess'),
+        'Net kills', 'Rear-court recovery', 7, 'normal');
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO public.session_reflections (camp_id, person_id, session_id, went_well, to_work_on, effort_rpe, energy_level)
+    VALUES ((SELECT v FROM ids WHERE k='scamp'), (SELECT v FROM ids WHERE k='p1'), (SELECT v FROM ids WHERE k='osess'),
+            'x', 'y', 5, 'low');
+    RAISE EXCEPTION 'reflection linked to another camp''s session';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+DO $$ BEGIN
+  IF (SELECT count(*) FROM public.session_reflections) <> 1 THEN RAISE EXCEPTION 'coach cannot read reflections'; END IF;
+END $$;
+
+-- 17g. Equipment, custom skills and the venue plan: staff write, everyone reads.
+INSERT INTO public.equipment (camp_id, name, category, quantity, status, borrowed_by)
+VALUES ((SELECT v FROM ids WHERE k='scamp'), 'Feather shuttles', 'shuttles', 10, 'borrowed', (SELECT v FROM ids WHERE k='p1'));
+INSERT INTO public.custom_skills (camp_id, title, category, difficulty, description, key_cues)
+VALUES ((SELECT v FROM ids WHERE k='scamp'), 'Net tumble', 'net', 'advanced', 'Spinning net shot', ARRAY['Soft grip']);
+INSERT INTO public.venue_plans (camp_id, plan_type, venue_name, shuttle_speed)
+VALUES ((SELECT v FROM ids WHERE k='scamp'), 'indoor_regular', 'Gymkhana courts 1-4', '77 (Medium)')
+ON CONFLICT (camp_id) DO UPDATE SET venue_name = EXCLUDED.venue_name;
+INSERT INTO public.court_allocations (camp_id, court_num, status, title)
+VALUES ((SELECT v FROM ids WHERE k='scamp'), 2, 'match', 'MS: Arjun v Bharat');
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO public.equipment (camp_id, name, category, status, borrowed_by)
+    VALUES ((SELECT v FROM ids WHERE k='scamp'), 'Racket', 'rackets', 'borrowed', (SELECT v FROM ids WHERE k='p3'));
+    RAISE EXCEPTION 'equipment lent to someone outside the camp';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT pg_temp.as_user(:u_p1, 'p1@x.test');
+DO $$ BEGIN
+  IF (SELECT count(*) FROM public.equipment) <> 1 OR (SELECT count(*) FROM public.custom_skills) <> 1
+     OR (SELECT count(*) FROM public.venue_plans) <> 1 OR (SELECT count(*) FROM public.court_allocations) <> 1 THEN
+    RAISE EXCEPTION 'player cannot read camp-wide content';
+  END IF;
+  BEGIN
+    INSERT INTO public.court_allocations (camp_id, court_num, status, title)
+    VALUES ((SELECT v FROM ids WHERE k='scamp'), 3, 'drill', 'Player-assigned');
+    RAISE EXCEPTION 'player assigned a court';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  DELETE FROM public.court_allocations;
+  IF NOT EXISTS (SELECT 1 FROM public.court_allocations) THEN RAISE EXCEPTION 'player freed a court'; END IF;
+  BEGIN
+    INSERT INTO public.equipment (camp_id, name, category) VALUES ((SELECT v FROM ids WHERE k='scamp'), 'Cones', 'training_aids');
+    RAISE EXCEPTION 'player added equipment';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN
+    INSERT INTO public.custom_skills (camp_id, title, category, difficulty, description)
+    VALUES ((SELECT v FROM ids WHERE k='scamp'), 'X', 'net', 'fundamental', 'Y');
+    RAISE EXCEPTION 'player added a skill';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  UPDATE public.venue_plans SET venue_name = 'Hacked';
+  DELETE FROM public.equipment;
+  IF (SELECT venue_name FROM public.venue_plans) <> 'Gymkhana courts 1-4' OR NOT EXISTS (SELECT 1 FROM public.equipment) THEN
+    RAISE EXCEPTION 'player changed camp-wide content';
+  END IF;
+END $$;
+
+-- 17h. Hiding the camp from players hides camp-wide content but keeps their own records.
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+UPDATE public.camps SET visibility = 'staff' WHERE id = (SELECT v FROM ids WHERE k='scamp');
+SELECT pg_temp.as_user(:u_p1, 'p1@x.test');
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM public.announcements) OR EXISTS (SELECT 1 FROM public.venue_plans) THEN
+    RAISE EXCEPTION 'hidden camp content visible to a player';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.injury_reports) THEN RAISE EXCEPTION 'player lost sight of own injury report'; END IF;
+  BEGIN
+    INSERT INTO public.injury_reports (camp_id, person_id, body_part, severity, notes)
+    VALUES ((SELECT v FROM ids WHERE k='scamp'), (SELECT v FROM ids WHERE k='p1'), 'Wrist', 'mild', 'x');
+    RAISE EXCEPTION 'player wrote into a hidden camp';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+
+-- 17i. Anonymous: nothing, and no access to the helpers.
+SELECT pg_temp.as_user(NULL, NULL);
+DO $$ BEGIN
+  BEGIN PERFORM 1 FROM public.announcements; RAISE EXCEPTION 'anon read announcements';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM 1 FROM public.injury_reports; RAISE EXCEPTION 'anon read injury reports';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM public.ensure_session((SELECT v FROM ids WHERE k='scamp'), current_date, 'X', NULL, NULL);
+    RAISE EXCEPTION 'anon called ensure_session';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+
 SELECT 'ALL TRAINING CAMP ASSERTIONS PASSED' AS result;

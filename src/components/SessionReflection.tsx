@@ -1,13 +1,9 @@
 import { useState, useEffect } from "react";
 import { MessageSquare, Flame, CheckCircle2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Button, Card, Sheet } from "./ui";
-import {
-  getSessionReflections,
-  saveSessionReflection,
-  deleteSessionReflection,
-  type SessionReflection,
-} from "../lib/campExtended";
+import { Button, Card, ConfirmDialog, Sheet, today } from "./ui";
+import { errorText } from "../lib/supabase";
+import { useReflectionMutations, useReflections, type SessionReflection } from "../lib/sharedData";
 import type { Session } from "../lib/types";
 
 export function SessionReflectionModal({
@@ -25,19 +21,17 @@ export function SessionReflectionModal({
   playerName?: string;
   sessions?: Session[];
 }) {
-  const [reflections, setReflections] = useState<SessionReflection[]>([]);
+  // Your own reflections; coaches can read players' reflections too (enforced by the database).
+  const reflectionsQ = useReflections(open ? campId : undefined, personId);
+  const mut = useReflectionMutations(campId);
+  const reflections = reflectionsQ.data ?? [];
   const [wentWell, setWentWell] = useState("");
   const [toWorkOn, setToWorkOn] = useState("");
   const [effortRpe, setEffortRpe] = useState<number>(6);
   const [energyLevel, setEnergyLevel] = useState<"high" | "normal" | "low">("normal");
   const [sessionId, setSessionId] = useState<string>("");
-  const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (campId) {
-      setReflections(getSessionReflections(campId, personId ?? undefined));
-    }
-  }, [campId, personId, open]);
+  const [deleting, setDeleting] = useState<SessionReflection | null>(null);
+  const submitting = mut.add.isPending;
 
   // Set default session if available
   useEffect(() => {
@@ -57,34 +51,36 @@ export function SessionReflectionModal({
       return;
     }
 
-    setSubmitting(true);
-    try {
-      const todayStr = new Date().toISOString().slice(0, 10);
-      saveSessionReflection(campId, {
+    const session = sessions.find((x) => x.id === sessionId);
+    mut.add.mutate(
+      {
         person_id: personId,
-        session_id: sessionId || null,
-        session_date: todayStr,
+        session_id: session?.id ?? null,
+        session_date: session?.session_date ?? today(),
         went_well: wentWell.trim(),
         to_work_on: toWorkOn.trim(),
         effort_rpe: effortRpe,
         energy_level: energyLevel,
-      });
-
-      toast.success("Post-practice reflection saved!");
-      setWentWell("");
-      setToWorkOn("");
-      setReflections(getSessionReflections(campId, personId));
-    } catch {
-      toast.error("Failed to save reflection.");
-    } finally {
-      setSubmitting(false);
-    }
+      },
+      {
+        onSuccess: () => {
+          toast.success("Post-practice reflection saved!");
+          setWentWell("");
+          setToWorkOn("");
+        },
+        onError: (err) => toast.error(errorText(err)),
+      },
+    );
   };
 
-  const handleDelete = (id: string) => {
-    deleteSessionReflection(campId, id);
-    setReflections(getSessionReflections(campId, personId ?? undefined));
-    toast.success("Reflection removed.");
+  const handleDelete = () => {
+    if (!deleting) return;
+    const id = deleting.id;
+    setDeleting(null);
+    mut.remove.mutate(id, {
+      onSuccess: () => toast.success("Reflection removed."),
+      onError: (err) => toast.error(errorText(err)),
+    });
   };
 
   return (
@@ -232,7 +228,9 @@ export function SessionReflectionModal({
             Past Reflections ({reflections.length})
           </h4>
 
-          {reflections.length === 0 ? (
+          {reflectionsQ.isLoading ? (
+            <p className="text-center py-5 text-xs text-ink-soft">Loading…</p>
+          ) : reflections.length === 0 ? (
             <Card className="text-center py-5 text-xs text-ink-soft border-dashed">
               No reflections logged yet. Submit your first check-in above after practice!
             </Card>
@@ -242,7 +240,7 @@ export function SessionReflectionModal({
                 <Card key={r.id} className="text-xs space-y-2">
                   <div className="flex items-center justify-between text-[11px] text-ink-soft border-b border-line pb-1.5">
                     <span className="font-semibold text-ink">
-                      {new Date(r.session_date).toLocaleDateString(undefined, {
+                      {new Date(`${r.session_date}T00:00:00`).toLocaleDateString(undefined, {
                         weekday: "short",
                         month: "short",
                         day: "numeric",
@@ -255,9 +253,9 @@ export function SessionReflectionModal({
                       <span className="capitalize">{r.energy_level}</span>
                       <button
                         type="button"
-                        onClick={() => handleDelete(r.id)}
+                        onClick={() => setDeleting(r)}
                         className="text-ink-soft hover:text-status-danger-text p-0.5"
-                        title="Delete reflection"
+                        aria-label="Delete reflection"
                       >
                         <Trash2 size={12} />
                       </button>
@@ -285,6 +283,15 @@ export function SessionReflectionModal({
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!deleting}
+        title="Delete this reflection?"
+        message="It can't be recovered."
+        confirmLabel="Delete"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleting(null)}
+      />
     </Sheet>
   );
 }
