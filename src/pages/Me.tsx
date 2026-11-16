@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import {
-  Bell, BookOpen, Calendar, ChevronRight, HeartPulse, History, LogOut, Megaphone, MessageSquare,
+  Bell, BookOpen, Calendar, ChevronRight, HeartPulse, History, KeyRound, LogOut, Megaphone, MessageSquare,
   LineChart, Package, Settings, SlidersHorizontal, TrendingUp, Trophy,
 } from "lucide-react";
 import { useSession } from "../lib/session";
@@ -21,8 +21,9 @@ import { AccessibilityModal } from "../components/AccessibilityModal";
 import { GuideButton } from "../components/GuideModal";
 import { InstallCard } from "../components/AppChrome";
 import { PhoneAlertsRow } from "../components/PhoneAlerts";
+import { PasswordSheet } from "../components/PasswordSheet";
 
-type Sheet = "history" | "reflections" | "injuries" | "skills" | "calendar" | "gear" | "archive" | "announcements" | "display" | null;
+type Sheet = "history" | "reflections" | "injuries" | "skills" | "calendar" | "gear" | "archive" | "announcements" | "display" | "password" | null;
 
 /** Everything about you in one place: your record, goals and private reports, camp tools, settings and sign-out. */
 export default function MePage() {
@@ -119,6 +120,9 @@ export default function MePage() {
           {meId && (
             <PhoneAlertsRow personId={meId} campId={campId} muted={!!me?.activity_muted} campActivityOn={s.camp!.activity_enabled} />
           )}
+          {s.auth?.user.email && (
+            <Row icon={<KeyRound size={17} />} title="Sign-in password" hint="Set or change a password for email sign-in" onClick={() => setOpen("password")} />
+          )}
           {s.isAdmin && <Row icon={<Settings size={17} />} title="Camp settings" hint="Roster, visibility and exports" href="/settings" />}
         </Card>
         <InstallCard />
@@ -137,6 +141,7 @@ export default function MePage() {
       <CampHistoryModal open={open === "archive"} onClose={close} camp={s.camp!} members={people} matches={matches.data ?? []} standings={standings.data ?? []} sessions={sessions.data ?? []} />
       <AnnouncementManagerModal open={open === "announcements"} onClose={close} campId={campId} members={people} />
       <AccessibilityModal open={open === "display"} onClose={close} />
+      <PasswordSheet open={open === "password"} onClose={close} email={s.auth?.user.email ?? ""} />
 
       <ConfirmDialog
         open={confirmSignOut}

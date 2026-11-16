@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Copy, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase, errorText } from "../lib/supabase";
+import { ACCOUNT_EXISTS, MIN_PASSWORD_LENGTH, authErrorText, isExistingAccountSignUp } from "../lib/password";
 import { useSession } from "../lib/session";
 import { useCreateCamp } from "../lib/api";
 import { Button, Card, Field, Input } from "../components/ui";
@@ -66,7 +67,11 @@ export function LoginPage() {
           password,
         });
         if (error) throw error;
-        if (data.session) {
+        if (isExistingAccountSignUp(data.user)) {
+          // Usually someone who joined with Google: sign-up can't add a password to that account.
+          toast.error(ACCOUNT_EXISTS);
+          setMode("signin");
+        } else if (data.session) {
           toast.success("Account created and signed in!");
         } else {
           toast.success("Account created! Please check your email to confirm, or sign in if confirmation is disabled.");
@@ -74,7 +79,7 @@ export function LoginPage() {
         }
       }
     } catch (err: unknown) {
-      toast.error(errorText(err));
+      toast.error(authErrorText(err) ?? errorText(err));
     } finally {
       setBusy(false);
     }
@@ -116,7 +121,7 @@ export function LoginPage() {
                 <Input
                   type="password"
                   required
-                  minLength={6}
+                  minLength={MIN_PASSWORD_LENGTH}
                   autoComplete={mode === "signin" ? "current-password" : "new-password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -133,8 +138,13 @@ export function LoginPage() {
                 onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
                 className="text-xs font-semibold text-brand hover:underline"
               >
-                {mode === "signin" ? "First time? Set a password" : "Already have a password? Sign in"}
+                {mode === "signin" ? "No account yet? Sign up with a password" : "Already have an account? Sign in"}
               </button>
+              {mode === "signup" && (
+                <p className="text-xs text-ink-soft">
+                  Signed in with Google before? Use Continue with Google, then add a password from the Me tab.
+                </p>
+              )}
             </form>
           </>
         )}
