@@ -1,12 +1,12 @@
 import { Suspense, lazy, type ReactNode } from "react";
 import { Link, Redirect, Route, Router, Switch, useLocation } from "wouter";
 import { Bell, CalendarDays, CircleUser, Dumbbell, LineChart, Settings, Swords, Trophy, Users } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "./lib/session";
-import { supabaseConfigured } from "./lib/supabase";
+import { emailLinkInUrl, supabaseConfigured } from "./lib/supabase";
 import { useActivity, useMembers } from "./lib/api";
 import { Avatar, Select, cx } from "./components/ui";
-import { LoginPage, NoCampPage, NotOnRosterPage, SetupNeededPage } from "./pages/Gate";
+import { EmailLinkPage, LoginPage, NoCampPage, NotOnRosterPage, SetupNeededPage } from "./pages/Gate";
 import TodayPage from "./pages/Today";
 import PlayerTodayPage from "./pages/PlayerToday";
 import MatchesPage from "./pages/Matches";
@@ -29,7 +29,9 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export default function App() {
   const s = useSession();
+  const [emailLink, setEmailLink] = useState(emailLinkInUrl);
   if (!supabaseConfigured) return <SetupNeededPage />;
+  if (emailLink) return <EmailLinkPage link={emailLink} onDone={() => setEmailLink(null)} />;
   if (s.loading) return <Splash />;
   if (!s.auth) return <LoginPage />;
   if (!s.meId) return <NotOnRosterPage />;

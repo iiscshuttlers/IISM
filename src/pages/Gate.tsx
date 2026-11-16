@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Copy, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
-import { supabase, errorText } from "../lib/supabase";
-import { ACCOUNT_EXISTS, MIN_PASSWORD_LENGTH, authErrorText, isExistingAccountSignUp } from "../lib/password";
+import { authRedirect, supabase, errorText } from "../lib/supabase";
+import {
+  ACCOUNT_EXISTS, MIN_PASSWORD_LENGTH, NEED_EMAIL_FOR_RESET, authErrorText, isExistingAccountSignUp, resetLinkSentText,
+  type EmailLink,
+} from "../lib/password";
 import { useSession } from "../lib/session";
 import { useCreateCamp } from "../lib/api";
 import { Button, Card, Field, Input } from "../components/ui";
@@ -36,6 +39,29 @@ export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  // An expired or already-used email link lands here signed out: say why, and tidy the address.
+  useEffect(() => {
+    if (!authRedirect.linkError) return;
+    toast.error(authRedirect.linkError, { id: "email-link" });
+    setShowPassword(true);
+    history.replaceState(history.state, "", location.pathname + location.search);
+  }, []);
+
+  const sendResetLink = async () => {
+    const address = email.trim();
+    if (!address.includes("@")) {
+      toast.error(NEED_EMAIL_FOR_RESET);
+      return;
+    }
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(address, {
+      redirectTo: window.location.origin + import.meta.env.BASE_URL,
+    });
+    setBusy(false);
+    if (error) toast.error(authErrorText(error) ?? errorText(error));
+    else toast.success(resetLinkSentText(address));
+  };
+
   const signInWithGoogle = async () => {
     setBusy(true);
     const { error } = await supabase.auth.signInWithOAuth({
@@ -65,6 +91,8 @@ export function LoginPage() {
         const { error, data } = await supabase.auth.signUp({
           email: email.trim(),
           password,
+          // The confirmation email links back to this site ({{ .RedirectTo }} in the template).
+          options: { emailRedirectTo: window.location.origin + import.meta.env.BASE_URL },
         });
         if (error) throw error;
         if (isExistingAccountSignUp(data.user)) {
@@ -128,6 +156,18 @@ export function LoginPage() {
                   placeholder="••••••••"
                 />
               </Field>
+              {mode === "signin" && (
+                <div className="-mt-1 text-right">
+                  <button
+                    type="button"
+                    onClick={sendResetLink}
+                    disabled={busy}
+                    className="text-xs font-semibold text-brand hover:underline disabled:opacity-50"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+              )}
 
               <Button type="submit" variant="secondary" className="w-full" disabled={busy}>
                 {busy ? "Working…" : mode === "signin" ? "Sign in with password" : "Create password & sign up"}
@@ -153,6 +193,41 @@ export function LoginPage() {
         <a href={`${import.meta.env.BASE_URL}privacy.html`} className="mt-2 inline-block text-xs font-semibold text-brand">
           Privacy policy
         </a>
+      </Card>
+    </Centered>
+  );
+}
+
+/**
+ * Where a sign-up or reset email lands. Nothing is used up until the tap, so a mail scanner that
+ * opens the link first leaves it working for the person.
+ */
+export function EmailLinkPage({ link, onDone }: { link: EmailLink; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const reset = link.type === "recovery";
+
+  const go = async () => {
+    setBusy(true);
+    // A reset fires PASSWORD_RECOVERY, which opens the new-password sheet (PasswordResetPrompt).
+    const { error } = await supabase.auth.verifyOtp({ token_hash: link.tokenHash, type: link.type });
+    // The token is spent either way: keep it out of the address bar and browser history.
+    history.replaceState(history.state, "", location.pathname);
+    if (error) toast.error(authErrorText(error) ?? errorText(error), { id: "email-link" });
+    else if (!reset) toast.success("Email confirmed. You're signed in.");
+    onDone();
+  };
+
+  return (
+    <Centered>
+      <Card className="text-center">
+        <AppLogo size={56} className="mx-auto mb-3 shadow-sm" />
+        <h1 className="text-xl font-bold">{reset ? "Reset your password" : "Confirm your email"}</h1>
+        <p className="mb-5 mt-1 text-sm text-ink-soft">
+          {reset ? "Tap below to sign in and choose a new password." : "Tap below to confirm your email and sign in."}
+        </p>
+        <Button className="w-full" onClick={go} disabled={busy}>
+          {busy ? "Working…" : reset ? "Choose a new password" : "Confirm and sign in"}
+        </Button>
       </Card>
     </Centered>
   );

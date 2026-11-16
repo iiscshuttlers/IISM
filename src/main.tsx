@@ -4,6 +4,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { Toaster } from "sonner";
+import { PasswordResetPrompt } from "./components/PasswordSheet";
 import App from "./App";
 import { SessionProvider } from "./lib/session";
 import { UpdatePrompt, applyOutdoor, readOutdoor } from "./components/AppChrome";
@@ -47,6 +48,7 @@ createRoot(document.getElementById("root")!).render(
     >
       <SessionProvider>
         <App />
+        <PasswordResetPrompt />
         <UpdatePrompt />
         <Toaster
           position="top-center"

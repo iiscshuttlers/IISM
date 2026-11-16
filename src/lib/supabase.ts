@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { readAuthRedirect, readEmailLink } from "./password";
 
 /** Accepts "abc.supabase.co" as well as "https://abc.supabase.co"; returns null if unusable. */
 export function normalizeSupabaseUrl(raw: string | undefined): string | null {
@@ -19,6 +20,14 @@ const url = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL as string | u
 const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
 
 export const supabaseConfigured = Boolean(url && anonKey);
+
+/**
+ * Read before the client below takes the session out of the address bar: whether this page was
+ * opened from a password-reset link, or from an email link that failed.
+ */
+export const authRedirect = readAuthRedirect(typeof window === "undefined" ? "" : window.location.hash);
+/** An unused sign-up or reset link this page was opened from (see readEmailLink). */
+export const emailLinkInUrl = readEmailLink(typeof window === "undefined" ? "" : window.location.search);
 
 // Placeholder values keep the app renderable (it shows a setup screen) before .env exists.
 export const supabase = createClient(url || "http://localhost:54321", anonKey || "missing-anon-key", {
