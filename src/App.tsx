@@ -1,12 +1,12 @@
 import { Suspense, lazy, type ReactNode } from "react";
 import { Link, Redirect, Route, Router, Switch, useLocation } from "wouter";
 import { Bell, CalendarDays, CircleUser, Dumbbell, LineChart, Settings, Swords, Trophy, Users } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession } from "./lib/session";
-import { supabaseConfigured } from "./lib/supabase";
+import { emailLinkInUrl, supabaseConfigured } from "./lib/supabase";
 import { useActivity, useMembers } from "./lib/api";
 import { Avatar, Select, cx } from "./components/ui";
-import { LoginPage, NoCampPage, NotOnRosterPage, SetupNeededPage } from "./pages/Gate";
+import { EmailLinkPage, LoginPage, NoCampPage, NotOnRosterPage, SetupNeededPage } from "./pages/Gate";
 import TodayPage from "./pages/Today";
 import PlayerTodayPage from "./pages/PlayerToday";
 import MatchesPage from "./pages/Matches";
@@ -22,6 +22,7 @@ const InsightsPage = lazy(() => import("./pages/Insights"));
 const MePage = lazy(() => import("./pages/Me"));
 import { ConnectionBar, SyncEngine } from "./components/AppChrome";
 import { AppLogo } from "./components/AppLogo";
+import { useToastsBelow } from "./components/AppToaster";
 import { applyA11yPrefs, getA11yPrefs } from "./lib/campExtended";
 import { useKeepPushSubscription } from "./lib/push";
 
@@ -29,7 +30,9 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export default function App() {
   const s = useSession();
+  const [emailLink, setEmailLink] = useState(emailLinkInUrl);
   if (!supabaseConfigured) return <SetupNeededPage />;
+  if (emailLink) return <EmailLinkPage link={emailLink} onDone={() => setEmailLink(null)} />;
   if (s.loading) return <Splash />;
   if (!s.auth) return <LoginPage />;
   if (!s.meId) return <NotOnRosterPage />;
@@ -76,6 +79,8 @@ function Shell({ children }: { children: ReactNode }) {
   const members = useMembers(s.camp?.id);
   const myName = (members.data ?? []).find((m) => m.id === s.meId)?.full_name;
   useKeepPushSubscription(s.meId, s.camp?.id);
+  const headerRef = useRef<HTMLElement>(null);
+  useToastsBelow(headerRef);
 
   useEffect(() => {
     applyA11yPrefs(getA11yPrefs());
@@ -148,7 +153,7 @@ function Shell({ children }: { children: ReactNode }) {
 
       <div className="min-w-0 flex-1">
         {/* Phones and tablets: compact top bar */}
-        <header className="sticky top-0 z-30 border-b border-line/70 bg-bg/80 pt-[env(safe-area-inset-top)] backdrop-blur-xl lg:hidden">
+        <header ref={headerRef} className="sticky top-0 z-30 border-b border-line/70 bg-bg/80 pt-[env(safe-area-inset-top)] backdrop-blur-xl lg:hidden">
           <div className="flex items-center gap-1 px-3 py-2 sm:px-5">
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
               <Link href="/" className="flex min-w-0 items-center gap-2.5 rounded-lg" title="Go to Today">
