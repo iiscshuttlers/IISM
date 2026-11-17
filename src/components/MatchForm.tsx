@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { toast } from "sonner";
 import { Search, X } from "lucide-react";
 import { Avatar, Button, Field, Input, Segmented, cx, today } from "./ui";
@@ -10,6 +10,7 @@ import type { Match, Member } from "../lib/types";
 import type { MatchInput } from "../lib/api";
 import { errorText } from "../lib/supabase";
 import { fuzzyFilter } from "../lib/fuzzy";
+import { TRAINING_EVENTS, categoryEvent, sortEvents } from "../lib/disciplines";
 
 type Format = "1_set" | "best_of_3" | "best_of_5";
 const GAMES_IN: Record<Format, number> = { "1_set": 1, best_of_3: 3, best_of_5: 5 };
@@ -354,6 +355,19 @@ export function MatchForm({
                   >
                     {present.has(p.id) && <span className="h-1.5 w-1.5 rounded-full bg-status-success-text" aria-hidden />}
                     {p.full_name}{p.id === meId && <span className="text-[10px] font-bold text-brand">(you)</span>}
+                    {p.events && p.events.length > 0 && (
+                      <span className="text-[10px] font-semibold text-ink-faint">
+                        {sortEvents(p.events).map((e, i) => (
+                          <Fragment key={e}>
+                            {i > 0 && " · "}
+                            {/* The event this match counts for stands out. */}
+                            <span className={cx(e === categoryEvent(category) && "text-brand")} title={TRAINING_EVENTS.find((t) => t.value === e)!.label}>
+                              {TRAINING_EVENTS.find((t) => t.value === e)!.short}
+                            </span>
+                          </Fragment>
+                        ))}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>

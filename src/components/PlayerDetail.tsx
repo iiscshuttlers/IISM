@@ -454,6 +454,8 @@ function TrainingFor({ member, campId, canEdit }: { member: Member; campId?: str
               key={e.value}
               type="button"
               aria-pressed={on}
+              aria-label={e.label}
+              title={e.label}
               onClick={() =>
                 save.mutate(
                   { person_id: member.id, events: toggleEvent(events, e.value) },
@@ -461,14 +463,14 @@ function TrainingFor({ member, campId, canEdit }: { member: Member; campId?: str
                 )
               }
               className={cx(
-                "inline-flex h-8 items-center rounded-full px-3 text-xs font-semibold transition-[background-color,color,transform] duration-150 active:scale-95",
+                "inline-flex h-8 min-w-[40px] items-center justify-center rounded-full px-3 text-xs font-bold transition-[background-color,color,transform] duration-150 active:scale-95",
                 on ? "bg-brand text-white" : "bg-surface text-ink-soft ring-1 ring-line hover:text-ink",
               )}
             >
-              {e.label}
+              {e.short}
             </button>
           ) : (
-            <Badge key={e.value} tone="brand">{e.label}</Badge>
+            <span key={e.value} title={e.label}><Badge tone="brand">{e.short}</Badge></span>
           );
         })
       )}

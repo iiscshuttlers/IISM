@@ -74,6 +74,6 @@ Consistent RPE logging helps coaches monitor fatigue, prevent injuries, and asse
 ## 5. Players & Assessments
 
 - **Players tab (staff):** Every player in one list with rating, wins, attendance, drill minutes, average effort (RPE) and coach score. Sort by any of them, filter by men or women or by what they're training for, and tap a name for the full record.
-- **Training for:** On a player's profile, coaches tap **Singles**, **Doubles** and/or **Mixed (XD)** — any combination. It shows under their name in the Players list and next to their name when picking players.
+- **Training for:** On a player's profile, coaches tap **S** (singles), **D** (doubles) and/or **XD** (mixed) — any combination. It shows as S · D · XD under their name in the Players list and next to their name when picking players; when recording a match, the event that match counts for is in green.
 - **Finding a player:** Every player picker has a search box that forgives typos — typing "Rsja" still finds Raja, and "rk" finds Raja Kumar.
 - **Assessments:** Coaches score players on **Technique**, **Fitness**, **Tactics**, and **Attitude** (1–5 scale) with **Assess**. Players never see these scores.
