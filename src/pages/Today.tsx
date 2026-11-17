@@ -14,27 +14,31 @@ import {
 } from "../lib/api";
 import { MatchCard } from "../components/MatchCard";
 import { PairingHelperModal } from "../components/PairingHelper";
-import { LiveCourtScorer } from "../components/LiveCourtScorer";
 import { AnnouncementBanner, AnnouncementManagerModal } from "../components/Announcements";
-import { EquipmentTrackerModal } from "../components/EquipmentTracker";
-import { InjuryTrackerModal } from "../components/InjuryTracker";
-import { CampHistoryModal } from "../components/CampHistory";
-import { PersonalMatchHistoryModal } from "../components/PersonalMatchHistory";
-import { SessionReflectionModal } from "../components/SessionReflection";
-import { SkillLibrarySheet } from "../components/SkillLibrary";
 import { WeatherVenueBanner } from "../components/WeatherVenuePlan";
 import { NextSessionFocusCard } from "../components/NextSessionFocusCard";
-import { CampCalendarExportModal } from "../components/CalendarExport";
 import { LiveCourtBoard } from "../components/LiveCourtBoard";
-import { QuickCommandPalette } from "../components/QuickCommandPalette";
-import { PlayerDetailSheet } from "../components/PlayerDetail";
+import { MountOnFirstOpen, lazyNamed } from "../components/Deferred";
 import { shareDailyScheduleOnWhatsApp } from "../lib/whatsappShare";
-import { useVenuePlan } from "../lib/sharedData";
+import { useLeave, useVenuePlan } from "../lib/sharedData";
+import { leaveByPerson, leaveReasonLabel } from "../lib/leave";
 import { DEFAULT_SESSION } from "../lib/today";
 import { errorText } from "../lib/supabase";
 import { CoachAttention } from "../components/CoachAttention";
 import { Avatar, Button, Card, ConfirmDialog, Empty, Section, cx, today } from "../components/ui";
 import type { Attendance } from "../lib/types";
+
+// Sheets that open on tap load on first use, so the home screen's first download stays small.
+const LiveCourtScorer = lazyNamed(() => import("../components/LiveCourtScorer"), "LiveCourtScorer");
+const EquipmentTrackerModal = lazyNamed(() => import("../components/EquipmentTracker"), "EquipmentTrackerModal");
+const InjuryTrackerModal = lazyNamed(() => import("../components/InjuryTracker"), "InjuryTrackerModal");
+const CampHistoryModal = lazyNamed(() => import("../components/CampHistory"), "CampHistoryModal");
+const PersonalMatchHistoryModal = lazyNamed(() => import("../components/PersonalMatchHistory"), "PersonalMatchHistoryModal");
+const SessionReflectionModal = lazyNamed(() => import("../components/SessionReflection"), "SessionReflectionModal");
+const SkillLibrarySheet = lazyNamed(() => import("../components/SkillLibrary"), "SkillLibrarySheet");
+const CampCalendarExportModal = lazyNamed(() => import("../components/CalendarExport"), "CampCalendarExportModal");
+const QuickCommandPalette = lazyNamed(() => import("../components/QuickCommandPalette"), "QuickCommandPalette");
+const PlayerDetailSheet = lazyNamed(() => import("../components/PlayerDetail"), "PlayerDetailSheet");
 
 const STATUS_LABEL: Record<Attendance["status"], string> = { present: "Present", late: "Late", absent: "Away" };
 const STATUS_TONE: Record<Attendance["status"], string> = {
@@ -96,6 +100,16 @@ export default function TodayPage() {
     return map;
   }, [attendance.data, todaySession]);
 
+  // Players the admin marked on leave today (0010). They're left out of "All present", the
+  // not-marked count and the pairing helper, unless they turn up anyway.
+  const leave = useLeave(campId);
+  const awayToday = useMemo(() => leaveByPerson(leave.data ?? [], today()), [leave.data]);
+  const availablePlayers = useMemo(
+    () => playerMembers.filter((p) => !awayToday.has(p.id) || attendanceMap[p.id] === "present" || attendanceMap[p.id] === "late"),
+    [playerMembers, awayToday, attendanceMap],
+  );
+  const onLeaveUnmarked = playerMembers.filter((p) => awayToday.has(p.id) && !attendanceMap[p.id]);
+
   // Current user's attendance record for today's first session
   const myTodayAtt = todaySession
     ? (attendance.data ?? []).find((a) => a.session_id === todaySession.id && a.person_id === s.meId)
@@ -141,7 +155,7 @@ export default function TodayPage() {
     try {
       const sessionId = await sessionIdForToday();
       const rows = playerMembers
-        .filter((p) => attendanceOf(sessionId, p.id)?.status !== "present")
+        .filter((p) => !awayToday.has(p.id) && attendanceOf(sessionId, p.id)?.status !== "present")
         .map((p) => {
           const cur = attendanceOf(sessionId, p.id);
           return { session_id: sessionId, person_id: p.id, status: "present" as const, rpe: cur?.rpe ?? null, note: cur?.note ?? null };
@@ -189,7 +203,7 @@ export default function TodayPage() {
   const presentCount = playerMembers.filter((p) => attendanceMap[p.id] === "present").length;
   const lateCount = playerMembers.filter((p) => attendanceMap[p.id] === "late").length;
   const absentCount = playerMembers.filter((p) => attendanceMap[p.id] === "absent").length;
-  const unmarkedCount = playerMembers.filter((p) => !attendanceMap[p.id]).length;
+  const unmarkedCount = playerMembers.filter((p) => !attendanceMap[p.id] && !awayToday.has(p.id)).length;
 
   const shareBriefing = () =>
     shareDailyScheduleOnWhatsApp({
@@ -269,6 +283,12 @@ export default function TodayPage() {
                   </div>
                 ))}
               </div>
+              {onLeaveUnmarked.length > 0 && (
+                <p className="text-xs text-ink-soft">
+                  <span className="font-semibold text-ink">On leave today:</span>{" "}
+                  {onLeaveUnmarked.map((p) => `${p.full_name} (${leaveReasonLabel(awayToday.get(p.id)!.reason).toLowerCase()})`).join(", ")}
+                </p>
+              )}
 
               {s.meId && (
                 <div className="flex items-center gap-2">
@@ -319,13 +339,14 @@ export default function TodayPage() {
           <div className="flex flex-wrap gap-1.5">
             {playerMembers.map((p) => {
               const status = attendanceMap[p.id];
+              const away = !status && awayToday.has(p.id);
               return (
                 <button
                   key={p.id}
                   type="button"
                   onClick={() => handleChipTap(p.id)}
                   aria-expanded={status ? attendanceFor === p.id : undefined}
-                  title={status ? `${STATUS_LABEL[status]}. Tap for options` : "Tap to mark present"}
+                  title={status ? `${STATUS_LABEL[status]}. Tap for options` : away ? "On leave today. Tap to mark present if they came" : "Tap to mark present"}
                   className={`inline-flex min-h-[36px] items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition cursor-pointer active:scale-95 ${attendanceFor === p.id ? "ring-2 ring-brand " : ""}${
                     status === "present"
                       ? "bg-status-success-bg text-status-success-text border-status-success-border font-semibold shadow-2xs"
@@ -333,13 +354,15 @@ export default function TodayPage() {
                       ? "bg-status-warn-bg text-status-warn-text border-status-warn-border"
                       : status === "absent"
                       ? "bg-status-danger-bg/60 text-status-danger-text border-status-danger-border opacity-70 line-through"
+                      : away
+                      ? "border-dashed bg-surface text-ink-faint border-line"
                       : "bg-surface-2 text-ink-soft border-line hover:border-brand/40"
                   }`}
                 >
                   <Avatar name={p.full_name} size="xs" />
                   <span>{p.full_name}</span>
                   <span className="text-[10px] font-bold opacity-80">
-                    {status === "present" ? "✓" : status === "late" ? "⏳" : status === "absent" ? "✕" : "+"}
+                    {status === "present" ? "✓" : status === "late" ? "⏳" : status === "absent" ? "✕" : away ? "Leave" : "+"}
                   </span>
                 </button>
               );
@@ -419,7 +442,7 @@ export default function TodayPage() {
               <ActionTile icon={Radio} label="Live scorer" onClick={() => setLiveScoring(true)} />
               <ActionTile icon={Plus} label="Record" href="/matches?new=1" primary />
               <PairingHelperModal
-                players={playerMembers}
+                players={availablePlayers}
                 matches={matches.data ?? []}
                 standings={standings.data ?? []}
                 attendanceMap={attendanceMap}
@@ -489,16 +512,18 @@ export default function TodayPage() {
       </div>
 
       {/* Live Court Scorer Modal */}
-      <LiveCourtScorer
-        open={liveScoring}
-        onClose={() => setLiveScoring(false)}
-        players={playerMembers}
-        onSaveMatch={async (m) => {
-          const r = await matchMut.record.mutateAsync(m);
-          if (r.queued) toast.success("No signal: saved on this phone. It will send automatically.");
-        }}
-        busy={matchMut.record.isPending}
-      />
+      <MountOnFirstOpen when={liveScoring}>
+        <LiveCourtScorer
+          open={liveScoring}
+          onClose={() => setLiveScoring(false)}
+          players={playerMembers}
+          onSaveMatch={async (m) => {
+            const r = await matchMut.record.mutateAsync(m);
+            if (r.queued) toast.success("No signal: saved on this phone. It will send automatically.");
+          }}
+          busy={matchMut.record.isPending}
+        />
+      </MountOnFirstOpen>
 
       {/* Announcements Manager Modal */}
       <AnnouncementManagerModal
@@ -510,72 +535,86 @@ export default function TodayPage() {
       />
 
       {/* Equipment Tracker Modal */}
-      <EquipmentTrackerModal
-        campId={campId}
-        open={equipmentOpen}
-        onClose={() => setEquipmentOpen(false)}
-        players={playerMembers}
-      />
+      <MountOnFirstOpen when={equipmentOpen}>
+        <EquipmentTrackerModal
+          campId={campId}
+          open={equipmentOpen}
+          onClose={() => setEquipmentOpen(false)}
+          players={playerMembers}
+        />
+      </MountOnFirstOpen>
 
       {/* Injury Tracker Modal */}
-      <InjuryTrackerModal
-        campId={campId}
-        open={injuryOpen}
-        onClose={() => setInjuryOpen(false)}
-        meId={s.meId ?? null}
-        isStaff={s.isStaff}
-        players={playerMembers}
-      />
+      <MountOnFirstOpen when={injuryOpen}>
+        <InjuryTrackerModal
+          campId={campId}
+          open={injuryOpen}
+          onClose={() => setInjuryOpen(false)}
+          meId={s.meId ?? null}
+          isStaff={s.isStaff}
+          players={playerMembers}
+        />
+      </MountOnFirstOpen>
 
       {/* Camp History Modal */}
-      <CampHistoryModal
-        camp={s.camp!}
-        open={historyOpen}
-        onClose={() => setHistoryOpen(false)}
-        members={members.data ?? []}
-        matches={matches.data ?? []}
-        standings={standings.data ?? []}
-        sessions={sessions.data ?? []}
-      />
+      <MountOnFirstOpen when={historyOpen}>
+        <CampHistoryModal
+          camp={s.camp!}
+          open={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+          members={members.data ?? []}
+          matches={matches.data ?? []}
+          standings={standings.data ?? []}
+          sessions={sessions.data ?? []}
+        />
+      </MountOnFirstOpen>
 
       {/* Personal Match History & Rating Progression Modal */}
-      <PersonalMatchHistoryModal
-        open={matchHistoryOpen}
-        onClose={() => setMatchHistoryOpen(false)}
-        personId={s.meId ?? null}
-        members={members.data ?? []}
-        matches={matches.data ?? []}
-        standings={standings.data ?? []}
-      />
+      <MountOnFirstOpen when={matchHistoryOpen}>
+        <PersonalMatchHistoryModal
+          open={matchHistoryOpen}
+          onClose={() => setMatchHistoryOpen(false)}
+          personId={s.meId ?? null}
+          members={members.data ?? []}
+          matches={matches.data ?? []}
+          standings={standings.data ?? []}
+        />
+      </MountOnFirstOpen>
 
       {/* Session Reflection Modal */}
-      <SessionReflectionModal
-        open={reflectionOpen}
-        onClose={() => setReflectionOpen(false)}
-        campId={campId}
-        personId={s.meId ?? null}
-        playerName={myName}
-        sessions={sessions.data ?? []}
-      />
+      <MountOnFirstOpen when={reflectionOpen}>
+        <SessionReflectionModal
+          open={reflectionOpen}
+          onClose={() => setReflectionOpen(false)}
+          campId={campId}
+          personId={s.meId ?? null}
+          playerName={myName}
+          sessions={sessions.data ?? []}
+        />
+      </MountOnFirstOpen>
 
       {/* Skill & Drill Library Sheet */}
-      <SkillLibrarySheet
-        open={skillLibraryOpen}
-        onClose={() => setSkillLibraryOpen(false)}
-        campId={campId}
-        currentPersonId={s.meId ?? null}
-        isStaff={s.isStaff}
-      />
+      <MountOnFirstOpen when={skillLibraryOpen}>
+        <SkillLibrarySheet
+          open={skillLibraryOpen}
+          onClose={() => setSkillLibraryOpen(false)}
+          campId={campId}
+          currentPersonId={s.meId ?? null}
+          isStaff={s.isStaff}
+        />
+      </MountOnFirstOpen>
 
       {/* Camp Calendar Export Modal */}
-      <CampCalendarExportModal
-        open={calendarOpen}
-        onClose={() => setCalendarOpen(false)}
-        campName={s.camp?.name ?? "IISc Badminton Camp"}
-        sessions={sessions.data ?? []}
-        matches={matches.data ?? []}
-        members={members.data ?? []}
-      />
+      <MountOnFirstOpen when={calendarOpen}>
+        <CampCalendarExportModal
+          open={calendarOpen}
+          onClose={() => setCalendarOpen(false)}
+          campName={s.camp?.name ?? "IISc Badminton Camp"}
+          sessions={sessions.data ?? []}
+          matches={matches.data ?? []}
+          members={members.data ?? []}
+        />
+      </MountOnFirstOpen>
 
       <ConfirmDialog
         open={confirmUnmarkAll}
@@ -587,25 +626,29 @@ export default function TodayPage() {
       />
 
       {/* Quick Command Palette (⌘K) */}
-      <QuickCommandPalette
-        open={commandOpen}
-        onClose={() => setCommandOpen(false)}
-        members={members.data ?? []}
-        onSelectPlayer={(id) => setSelectedPersonId(id)}
-      />
+      <MountOnFirstOpen when={commandOpen}>
+        <QuickCommandPalette
+          open={commandOpen}
+          onClose={() => setCommandOpen(false)}
+          members={members.data ?? []}
+          onSelectPlayer={(id) => setSelectedPersonId(id)}
+        />
+      </MountOnFirstOpen>
 
       {/* Quick Player Detail Inspection Sheet */}
-      <PlayerDetailSheet
-        campId={campId}
-        personId={selectedPersonId}
-        onClose={() => setSelectedPersonId(null)}
-        members={members.data ?? []}
-        standings={standings.data ?? []}
-        matches={matches.data ?? []}
-        attendance={attendance.data ?? []}
-        assessments={assessments.data ?? []}
-        isStaff={s.isStaff}
-      />
+      <MountOnFirstOpen when={!!selectedPersonId}>
+        <PlayerDetailSheet
+          campId={campId}
+          personId={selectedPersonId}
+          onClose={() => setSelectedPersonId(null)}
+          members={members.data ?? []}
+          standings={standings.data ?? []}
+          matches={matches.data ?? []}
+          attendance={attendance.data ?? []}
+          assessments={assessments.data ?? []}
+          isStaff={s.isStaff}
+        />
+      </MountOnFirstOpen>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { Suspense, lazy, type ReactNode } from "react";
 import { Link, Redirect, Route, Router, Switch, useLocation } from "wouter";
-import { Bell, CalendarDays, CircleUser, Dumbbell, LineChart, Settings, Swords, Trophy, Users } from "lucide-react";
+import { Bell, CalendarDays, CircleUser, Dumbbell, LineChart, ListOrdered, Settings, Swords, Trophy, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "./lib/session";
 import { emailLinkInUrl, supabaseConfigured } from "./lib/supabase";
@@ -19,6 +19,7 @@ const PlayersPage = lazy(() => import("./pages/Players"));
 const SettingsPage = lazy(() => import("./pages/Settings"));
 const ActivityPage = lazy(() => import("./pages/Activity"));
 const InsightsPage = lazy(() => import("./pages/Insights"));
+const ShortlistPage = lazy(() => import("./pages/Shortlist"));
 const MePage = lazy(() => import("./pages/Me"));
 import { ConnectionBar, SyncEngine } from "./components/AppChrome";
 import { AppLogo } from "./components/AppLogo";
@@ -53,6 +54,7 @@ export default function App() {
             {s.isStaff && <Route path="/players" component={PlayersPage} />}
             {s.isStaff && <Route path="/selection"><Redirect to="/players" replace /></Route>}
             {s.isStaff && <Route path="/insights" component={InsightsPage} />}
+            {s.isAdmin && <Route path="/shortlist" component={ShortlistPage} />}
             {s.isAdmin && <Route path="/settings" component={SettingsPage} />}
             <Route><Redirect to="/" /></Route>
           </Switch>
@@ -102,6 +104,7 @@ function Shell({ children }: { children: ReactNode }) {
     { href: "/activity", label: "Activity", icon: Bell, badge: unread },
     ...(s.isStaff ? [{ href: "/insights", label: "Insights", icon: LineChart, badge: 0 }] : []),
     ...(s.isStaff ? [{ href: "/me", label: "Me", icon: CircleUser, badge: 0 }] : []),
+    ...(s.isAdmin ? [{ href: "/shortlist", label: "Shortlist", icon: ListOrdered, badge: 0 }] : []),
     ...(s.isAdmin ? [{ href: "/settings", label: "Settings", icon: Settings, badge: 0 }] : []),
   ];
   const isActive = (href: string) => (href === "/" ? loc === "/" : loc.startsWith(href));

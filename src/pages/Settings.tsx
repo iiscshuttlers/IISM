@@ -9,6 +9,7 @@ import { MAX_COURTS, useCourtMutations } from "../lib/sharedData";
 import { Badge, Button, Card, ConfirmDialog, Field, Input, PageTitle, Segmented, Select, Sheet, Textarea, Toggle, cx } from "../components/ui";
 import { CsvExportCard } from "../components/CsvExport";
 import { CampHistoryModal } from "../components/CampHistory";
+import { LeaveCard } from "../components/LeaveManager";
 import type { RosterAdminRow, Role } from "../lib/types";
 
 type RosterFilter = "all" | "pending" | "no_email" | "staff";
@@ -183,6 +184,8 @@ export default function SettingsPage() {
           ))}
         </div>
       </Card>
+
+      <LeaveCard campId={camp.id} players={(members.data ?? []).filter((m) => m.role === "player")} />
 
       {/* ── Visibility ── */}
       <Card>

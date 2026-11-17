@@ -1305,4 +1305,112 @@ EXCEPTION WHEN insufficient_privilege THEN NULL;
 END $$;
 RESET ROLE;
 
+-- 0010a. Leave: only the camp admin marks it; the player and staff read it; other players can't.
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+DO $$ DECLARE c uuid := (SELECT v FROM ids WHERE k='camp'); p1 uuid := (SELECT v FROM ids WHERE k='p1');
+BEGIN
+  INSERT INTO public.player_leave (camp_id, person_id, starts_on, ends_on, reason, note, created_by)
+  VALUES (c, p1, '2026-11-20', '2026-11-22', 'exam', 'Mid-sem', (SELECT v FROM ids WHERE k='p2'));
+  IF (SELECT created_by FROM public.player_leave WHERE person_id = p1) <> (SELECT v FROM ids WHERE k='admin') THEN
+    RAISE EXCEPTION 'leave: created_by not stamped by the database';
+  END IF;
+  BEGIN INSERT INTO public.player_leave (camp_id, person_id, starts_on, ends_on) VALUES (c, p1, '2026-11-25', '2026-11-24');
+    RAISE EXCEPTION 'leave ending before it starts accepted';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN INSERT INTO public.player_leave (camp_id, person_id, starts_on, ends_on, reason) VALUES (c, p1, '2026-11-25', '2026-11-26', 'holiday');
+    RAISE EXCEPTION 'unknown leave reason accepted';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN INSERT INTO public.player_leave (camp_id, person_id, starts_on, ends_on) VALUES (c, gen_random_uuid(), '2026-11-25', '2026-11-26');
+    RAISE EXCEPTION 'leave marked for someone outside the camp';
+  EXCEPTION WHEN insufficient_privilege OR foreign_key_violation THEN NULL; END;
+END $$;
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+DO $$ DECLARE c uuid := (SELECT v FROM ids WHERE k='camp'); p2 uuid := (SELECT v FROM ids WHERE k='p2');
+BEGIN
+  IF (SELECT count(*) FROM public.player_leave WHERE camp_id = c) <> 1 THEN RAISE EXCEPTION 'coach cannot read leave'; END IF;
+  BEGIN INSERT INTO public.player_leave (camp_id, person_id, starts_on, ends_on) VALUES (c, p2, '2026-11-20', '2026-11-20');
+    RAISE EXCEPTION 'coach marked leave';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  UPDATE public.player_leave SET note = 'changed by coach' WHERE camp_id = c;
+  DELETE FROM public.player_leave WHERE camp_id = c;
+END $$;
+SELECT pg_temp.as_user(:u_p1, 'p1@x.test');
+DO $$ DECLARE c uuid := (SELECT v FROM ids WHERE k='camp'); p1 uuid := (SELECT v FROM ids WHERE k='p1');
+BEGIN
+  IF (SELECT note FROM public.player_leave WHERE person_id = p1) IS DISTINCT FROM 'Mid-sem' THEN
+    RAISE EXCEPTION 'player cannot read own leave, or a coach changed or removed it';
+  END IF;
+  BEGIN INSERT INTO public.player_leave (camp_id, person_id, starts_on, ends_on) VALUES (c, p1, '2026-11-28', '2026-11-28');
+    RAISE EXCEPTION 'player marked their own leave';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  UPDATE public.player_leave SET ends_on = '2026-12-10' WHERE person_id = p1;
+  DELETE FROM public.player_leave WHERE person_id = p1;
+END $$;
+SELECT pg_temp.as_user(:u_p2, 'p2@x.test');
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM public.player_leave) THEN RAISE EXCEPTION 'player can read someone else''s leave'; END IF;
+END $$;
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+DO $$ DECLARE p1 uuid := (SELECT v FROM ids WHERE k='p1');
+BEGIN
+  IF (SELECT ends_on FROM public.player_leave WHERE person_id = p1) <> '2026-11-22' THEN
+    RAISE EXCEPTION 'player changed their own leave dates';
+  END IF;
+  UPDATE public.player_leave SET ends_on = '2026-11-23' WHERE person_id = p1;
+  IF (SELECT updated_by FROM public.player_leave WHERE person_id = p1) <> (SELECT v FROM ids WHERE k='admin') THEN
+    RAISE EXCEPTION 'leave: updated_by not stamped';
+  END IF;
+  BEGIN UPDATE public.player_leave SET person_id = (SELECT v FROM ids WHERE k='p2') WHERE person_id = p1;
+    RAISE EXCEPTION 'leave moved to another player';
+  EXCEPTION WHEN raise_exception THEN IF SQLERRM <> 'immutable_person' THEN RAISE; END IF; END;
+  DELETE FROM public.player_leave WHERE person_id = p1;
+  IF EXISTS (SELECT 1 FROM public.player_leave) THEN RAISE EXCEPTION 'admin could not remove leave'; END IF;
+END $$;
+RESET ROLE;
+SET ROLE anon;
+DO $$ BEGIN
+  PERFORM 1 FROM public.player_leave;
+  RAISE EXCEPTION 'signed-out caller read leave';
+EXCEPTION WHEN insufficient_privilege THEN NULL;
+END $$;
+RESET ROLE;
+
+-- 0010b. Shortlist weights: the camp admin only. Coaches and players see nothing and change nothing.
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+DO $$ DECLARE c uuid := (SELECT v FROM ids WHERE k='camp');
+BEGIN
+  INSERT INTO public.shortlist_weights (camp_id, rating, coach_score, attendance, win_rate)
+  VALUES (c, 5, 3, 2, 0)
+  ON CONFLICT (camp_id) DO UPDATE SET rating = excluded.rating;
+  IF (SELECT updated_by FROM public.shortlist_weights WHERE camp_id = c) <> (SELECT v FROM ids WHERE k='admin') THEN
+    RAISE EXCEPTION 'weights: updated_by not stamped';
+  END IF;
+  BEGIN UPDATE public.shortlist_weights SET rating = 0, coach_score = 0, attendance = 0, win_rate = 0 WHERE camp_id = c;
+    RAISE EXCEPTION 'all-zero weights accepted';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN UPDATE public.shortlist_weights SET rating = 11 WHERE camp_id = c;
+    RAISE EXCEPTION 'weight above 10 accepted';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+END $$;
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+DO $$ DECLARE c uuid := (SELECT v FROM ids WHERE k='camp');
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.shortlist_weights) THEN RAISE EXCEPTION 'coach can read shortlist weights'; END IF;
+  UPDATE public.shortlist_weights SET rating = 10 WHERE camp_id = c;
+  BEGIN INSERT INTO public.shortlist_weights (camp_id) VALUES (c);
+    RAISE EXCEPTION 'coach wrote shortlist weights';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT pg_temp.as_user(:u_p1, 'p1@x.test');
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM public.shortlist_weights) THEN RAISE EXCEPTION 'player can read shortlist weights'; END IF;
+END $$;
+SELECT pg_temp.as_user(:u_admin, 'admin@x.test');
+DO $$ BEGIN
+  IF (SELECT rating FROM public.shortlist_weights WHERE camp_id = (SELECT v FROM ids WHERE k='camp')) <> 5 THEN
+    RAISE EXCEPTION 'a coach changed the shortlist weights';
+  END IF;
+END $$;
+RESET ROLE;
+
 SELECT 'ALL TRAINING CAMP ASSERTIONS PASSED' AS result;

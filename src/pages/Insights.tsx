@@ -10,6 +10,8 @@ import { PlayerSelect } from "../components/PlayerSelect";
 import { Button } from "../components/ui";
 import { InjuryTrackerModal } from "../components/InjuryTracker";
 import type { Member } from "../lib/types";
+import { useLeave } from "../lib/sharedData";
+import { attendanceSummary } from "../lib/leave";
 
 type Tab = "prompts" | "compare" | "pairs" | "load";
 
@@ -148,6 +150,7 @@ function Compare({ campId }: { campId: string }) {
   const assessments = useAssessments(campId, true);
   const wellness = useWellness(campId);
   const selection = useSelection(campId, true);
+  const leave = useLeave(campId);
   const [picked, setPicked] = useState<string[]>([]);
 
   const pairs = useMemo(() => pairStats(matches.data ?? []), [matches.data]);
@@ -159,8 +162,8 @@ function Compare({ campId }: { campId: string }) {
 
   const cols = picked.map((id) => {
     const st = standings.data?.find((r) => r.person_id === id);
-    const att = (attendance.data ?? []).filter((a) => a.person_id === id);
-    const sessCount = (sessions.data ?? []).length;
+    // Sessions missed on leave the admin marked don't count against them.
+    const attSummary = attendanceSummary(id, sessions.data ?? [], attendance.data ?? [], leave.data ?? []);
     const asmt = (assessments.data ?? []).filter((a) => a.person_id === id);
     const avg = (k: "technique" | "fitness" | "tactics" | "attitude") => {
       const v = asmt.map((a) => a[k]).filter((x): x is number => x != null);
@@ -180,7 +183,9 @@ function Compare({ campId }: { campId: string }) {
         ["Win %", st?.played ? `${Math.round((100 * st.won) / st.played)}%` : "—"],
         ["Rally ± (game score)", st && (st.points_for || st.points_against) ? String(st.points_for - st.points_against) : "—"],
         ["Form", st?.form || "—"],
-        ["Attendance", sessCount ? `${Math.round((100 * att.filter((a) => a.status !== "absent").length) / sessCount)}%` : "—"],
+        ["Attendance", attSummary.pct != null
+          ? `${attSummary.pct}%${attSummary.excused ? ` (${attSummary.excused} on leave)` : ""}`
+          : "—"],
         ["Load, last 7 days", String(load.find((l) => l.person_id === id)?.week ?? 0)],
         ["Readiness (7-day avg)", well.length ? `${Math.round(well.reduce((t, w) => t + readiness(w), 0) / well.length)}/100` : "—"],
         ["Technique", avg("technique")],

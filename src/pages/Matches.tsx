@@ -12,13 +12,18 @@ import { MatchCard } from "../components/MatchCard";
 import { AlertedMatch } from "../components/AlertedMatch";
 import { alertedMatchId } from "../lib/push";
 import { PairingHelperModal } from "../components/PairingHelper";
-import { LiveCourtScorer } from "../components/LiveCourtScorer";
-import { TournamentGeneratorModal } from "../components/TournamentGenerator";
-import { Button, Card, Chip, ConfirmDialog, Empty, Field, Input, PageTitle, ChipRow, Section, Segmented, Sheet, Skeleton, Textarea, cx, dayLabel } from "../components/ui";
+import { MountOnFirstOpen, lazyNamed } from "../components/Deferred";
+import { Button, Card, Chip, ConfirmDialog, Empty, Field, Input, PageTitle, ChipRow, Section, Segmented, Sheet, Skeleton, Textarea, cx, dayLabel, today } from "../components/ui";
+import { useLeave } from "../lib/sharedData";
+import { leaveByPerson } from "../lib/leave";
 import type { Category } from "../lib/scores";
 import type { Match } from "../lib/types";
 import { useTodayAttendance } from "../lib/today";
 import { fuzzyScore } from "../lib/fuzzy";
+
+// Tools that open on tap load on first use, so the Matches tab's first download stays small.
+const LiveCourtScorer = lazyNamed(() => import("../components/LiveCourtScorer"), "LiveCourtScorer");
+const TournamentGeneratorModal = lazyNamed(() => import("../components/TournamentGenerator"), "TournamentGeneratorModal");
 
 export default function MatchesPage() {
   const s = useSession();
@@ -29,6 +34,8 @@ export default function MatchesPage() {
   const mut = useMatchMutations(campId);
   // Players checked in today are offered first when picking who played.
   const { presentIds } = useTodayAttendance(campId);
+  // Players on leave today (0010) are left out of "Who plays next?" unless they turn up anyway.
+  const leave = useLeave(campId);
   // ?filter=disputed (from the coach's "Needs your attention" card) opens on disputed results.
   const [filter, setFilter] = useState<"all" | "mine" | "disputed">(() =>
     new URLSearchParams(window.location.search).get("filter") === "disputed" ? "disputed" : "all",
@@ -157,6 +164,8 @@ export default function MatchesPage() {
 
   const people = members.data ?? [];
   const players = people.filter((p) => p.role === "player");
+  const awayToday = leaveByPerson(leave.data ?? [], today());
+  const pairingPlayers = players.filter((p) => !awayToday.has(p.id) || presentIds.includes(p.id));
   const memberMap = useMemo(() => new Map(people.map((p) => [p.id, p.full_name.toLowerCase()])), [people]);
 
   const list = (matches.data ?? []).filter((m) => {
@@ -200,9 +209,9 @@ export default function MatchesPage() {
         <button type="button" onClick={() => setLiveScoring(true)} className={TOOL}>
           <Radio size={15} className="text-brand" /> Live scorer
         </button>
-        {players.length >= 2 && (
+        {pairingPlayers.length >= 2 && (
           <PairingHelperModal
-            players={players}
+            players={pairingPlayers}
             matches={matches.data ?? []}
             standings={standings.data ?? []}
             onSelectMatch={(cat, slots) => {
@@ -413,28 +422,32 @@ export default function MatchesPage() {
       </Sheet>
 
       {/* Live Court Scorer */}
-      <LiveCourtScorer
-        open={liveScoring}
-        onClose={() => setLiveScoring(false)}
-        players={players}
-        onSaveMatch={async (m) => {
-          const r = await mut.record.mutateAsync(m);
-          if (r.queued) toast.success("No signal: saved on this phone. It will send automatically.");
-        }}
-        busy={mut.record.isPending}
-      />
+      <MountOnFirstOpen when={liveScoring}>
+        <LiveCourtScorer
+          open={liveScoring}
+          onClose={() => setLiveScoring(false)}
+          players={players}
+          onSaveMatch={async (m) => {
+            const r = await mut.record.mutateAsync(m);
+            if (r.queued) toast.success("No signal: saved on this phone. It will send automatically.");
+          }}
+          busy={mut.record.isPending}
+        />
+      </MountOnFirstOpen>
 
       {/* Tournament Matchday Generator */}
-      <TournamentGeneratorModal
-        open={tournamentOpen}
-        onClose={() => setTournamentOpen(false)}
-        players={players}
-        onStartMatch={(cat, slots) => {
-          setTournamentOpen(false);
-          setPrefill({ category: cat, slots });
-          setRecording(true);
-        }}
-      />
+      <MountOnFirstOpen when={tournamentOpen}>
+        <TournamentGeneratorModal
+          open={tournamentOpen}
+          onClose={() => setTournamentOpen(false)}
+          players={players}
+          onStartMatch={(cat, slots) => {
+            setTournamentOpen(false);
+            setPrefill({ category: cat, slots });
+            setRecording(true);
+          }}
+        />
+      </MountOnFirstOpen>
 
       <ConfirmDialog
         open={!!deletingForever}
