@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { Users } from "lucide-react";
-import { Card, Select, Sheet } from "./ui";
+import { Card, Sheet } from "./ui";
+import { PlayerSelect } from "./PlayerSelect";
 import type { Match, Member, Standing } from "../lib/types";
 
 export function HeadToHeadModal({
@@ -82,24 +83,12 @@ export function HeadToHeadModal({
         <div className="grid grid-cols-2 gap-3 items-center">
           <div>
             <label className="text-xs font-semibold text-ink-soft mb-1 block">Player 1</label>
-            <Select value={p1Id} onChange={(e) => setP1Id(e.target.value)}>
-              {players.map((p) => (
-                <option key={p.id} value={p.id} disabled={p.id === p2Id}>
-                  {p.full_name}
-                </option>
-              ))}
-            </Select>
+            <PlayerSelect label="Player 1" players={players} value={p1Id} onChange={setP1Id} disabledIds={[p2Id]} />
           </div>
 
           <div>
             <label className="text-xs font-semibold text-ink-soft mb-1 block">Player 2</label>
-            <Select value={p2Id} onChange={(e) => setP2Id(e.target.value)}>
-              {players.map((p) => (
-                <option key={p.id} value={p.id} disabled={p.id === p1Id}>
-                  {p.full_name}
-                </option>
-              ))}
-            </Select>
+            <PlayerSelect label="Player 2" players={players} value={p2Id} onChange={setP2Id} disabledIds={[p1Id]} />
           </div>
         </div>
 

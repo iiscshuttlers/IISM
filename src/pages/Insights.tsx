@@ -5,7 +5,8 @@ import {
   useAssessments, useAttendance, useDrills, useMatches, useMembers, useSelection, useSessions, useStandings, useWellness,
 } from "../lib/api";
 import { confidence, generateCoachingPrompts, pairStats, readiness, trainingLoad } from "../lib/insights";
-import { Badge, Card, Empty, PageTitle, Segmented, Select, cx, fmtDate } from "../components/ui";
+import { Badge, Card, Empty, PageTitle, Segmented, cx, fmtDate } from "../components/ui";
+import { PlayerSelect } from "../components/PlayerSelect";
 import { Button } from "../components/ui";
 import { InjuryTrackerModal } from "../components/InjuryTracker";
 import type { Member } from "../lib/types";
@@ -197,16 +198,13 @@ function Compare({ campId }: { campId: string }) {
       <p className="text-xs text-ink-soft">Pick up to three players to compare side by side. The strength range is where a player's true level most likely sits (about 95% sure), on a separate 1500-based scale used only for this; it narrows as they play more.</p>
       <div className="grid grid-cols-3 gap-2">
         {[0, 1, 2].map((i) => (
-          <Select key={i} aria-label={`Player ${i + 1}`} value={picked[i] ?? ""}
-            onChange={(e) => {
+          <PlayerSelect key={i} placeholder={`Player ${i + 1}`} value={picked[i] ?? ""} allowClear
+            players={players.filter((p) => p.id === picked[i] || !picked.includes(p.id))}
+            onChange={(id) => {
               const next = [...picked];
-              if (e.target.value) next[i] = e.target.value; else next.splice(i, 1);
+              if (id) next[i] = id; else next.splice(i, 1);
               setPicked(next.filter(Boolean));
-            }}>
-            <option value="">{`Player ${i + 1}`}</option>
-            {players.filter((p) => p.id === picked[i] || !picked.includes(p.id))
-              .map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-          </Select>
+            }} />
         ))}
       </div>
       {cols.length === 0 ? <Empty>Choose players above.</Empty> : (

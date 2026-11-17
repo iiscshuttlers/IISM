@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { disciplineStat, hasDisciplineRatings, rankByDiscipline } from "./disciplines";
+import { disciplineStat, eventsLabel, hasDisciplineRatings, rankByDiscipline, sortEvents, toggleEvent } from "./disciplines";
 import type { Standing } from "./types";
 
 const st = (id: string, over: Partial<Standing>): Standing => ({
@@ -32,5 +32,22 @@ describe("disciplines", () => {
   it("knows when the server has discipline ratings", () => {
     expect(hasDisciplineRatings([a])).toBe(true);
     expect(hasDisciplineRatings([{ ...a, rating_singles: undefined }])).toBe(false);
+  });
+});
+
+describe("training events", () => {
+  it("keeps a fixed order and drops repeats or unknown values", () => {
+    expect(sortEvents(["mixed", "singles", "mixed", "bogus"])).toEqual(["singles", "mixed"]);
+  });
+
+  it("labels them briefly", () => {
+    expect(eventsLabel(["mixed", "singles"])).toBe("Singles · XD");
+    expect(eventsLabel([])).toBe("");
+    expect(eventsLabel(undefined)).toBe("");
+  });
+
+  it("toggles one on or off", () => {
+    expect(toggleEvent(["singles"], "mixed")).toEqual(["singles", "mixed"]);
+    expect(toggleEvent(["singles", "mixed"], "singles")).toEqual(["mixed"]);
   });
 });

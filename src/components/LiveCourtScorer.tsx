@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Play, RotateCcw, Trophy, Check, Pencil, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, Button, Card, ConfirmDialog, Field, Select, Sheet, cx, today } from "./ui";
+import { PlayerSelect } from "./PlayerSelect";
 import { CATEGORIES, isSingles, slotGenders, type Category } from "../lib/scores";
 import type { Member } from "../lib/types";
 import type { MatchInput } from "../lib/api";
@@ -342,75 +343,63 @@ export function LiveCourtScorer({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <span className="text-xs font-semibold text-ink-soft">Team 1</span>
-                <Select
-                  value={slots[0] ?? ""}
-                  onChange={(e) => {
+                <PlayerSelect
+                  label={`Team 1 · ${singles ? "Player" : "Player 1"}`}
+                  placeholder={singles ? "Player" : "Player 1"}
+                  players={optionsFor(0)}
+                  value={slots[0]}
+                  allowClear
+                  onChange={(id) => {
                     const n = [...slots];
-                    n[0] = e.target.value || null;
+                    n[0] = id || null;
                     setSlots(n);
                   }}
-                >
-                  <option value="">{singles ? "Player" : "Player 1"}</option>
-                  {optionsFor(0).map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.full_name}
-                    </option>
-                  ))}
-                </Select>
+                />
 
                 {!singles && (
-                  <Select
-                    value={slots[1] ?? ""}
-                    onChange={(e) => {
+                  <PlayerSelect
+                    label="Team 1 · Player 2"
+                    placeholder="Player 2"
+                    players={optionsFor(1)}
+                    value={slots[1]}
+                    allowClear
+                    onChange={(id) => {
                       const n = [...slots];
-                      n[1] = e.target.value || null;
+                      n[1] = id || null;
                       setSlots(n);
                     }}
-                  >
-                    <option value="">Player 2</option>
-                    {optionsFor(1).map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.full_name}
-                      </option>
-                    ))}
-                  </Select>
+                  />
                 )}
               </div>
 
               <div className="space-y-2">
                 <span className="text-xs font-semibold text-ink-soft">Team 2</span>
-                <Select
-                  value={slots[2] ?? ""}
-                  onChange={(e) => {
+                <PlayerSelect
+                  label={`Team 2 · ${singles ? "Player" : "Player 1"}`}
+                  placeholder={singles ? "Player" : "Player 1"}
+                  players={optionsFor(2)}
+                  value={slots[2]}
+                  allowClear
+                  onChange={(id) => {
                     const n = [...slots];
-                    n[2] = e.target.value || null;
+                    n[2] = id || null;
                     setSlots(n);
                   }}
-                >
-                  <option value="">{singles ? "Player" : "Player 1"}</option>
-                  {optionsFor(2).map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.full_name}
-                    </option>
-                  ))}
-                </Select>
+                />
 
                 {!singles && (
-                  <Select
-                    value={slots[3] ?? ""}
-                    onChange={(e) => {
+                  <PlayerSelect
+                    label="Team 2 · Player 2"
+                    placeholder="Player 2"
+                    players={optionsFor(3)}
+                    value={slots[3]}
+                    allowClear
+                    onChange={(id) => {
                       const n = [...slots];
-                      n[3] = e.target.value || null;
+                      n[3] = id || null;
                       setSlots(n);
                     }}
-                  >
-                    <option value="">Player 2</option>
-                    {optionsFor(3).map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.full_name}
-                      </option>
-                    ))}
-                  </Select>
+                  />
                 )}
               </div>
             </div>

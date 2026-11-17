@@ -4,6 +4,7 @@ import { Search, Trophy, Swords, Calendar, Dumbbell, BookOpen, Settings, ArrowRi
 import { Sheet } from "./ui";
 import { DEFAULT_SKILLS } from "../lib/campExtended";
 import type { Member } from "../lib/types";
+import { fuzzyFilter } from "../lib/fuzzy";
 
 export function QuickCommandPalette({
   open,
@@ -58,7 +59,7 @@ export function QuickCommandPalette({
 
     return {
       pages: navPages.filter((p) => p.title.toLowerCase().includes(q)),
-      players: members.filter((m) => m.full_name.toLowerCase().includes(q)).slice(0, 8),
+      players: fuzzyFilter(members, q, (m) => m.full_name).slice(0, 8),
       skills: DEFAULT_SKILLS.filter(
         (s) => s.title.toLowerCase().includes(q) || s.category.toLowerCase().includes(q)
       ).slice(0, 6),

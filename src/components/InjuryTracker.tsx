@@ -2,6 +2,7 @@ import { useState } from "react";
 import { HeartPulse, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge, Button, Card, ConfirmDialog, Field, Select, Sheet, Input, Textarea, cx, fmtDate } from "./ui";
+import { PlayerSelect } from "./PlayerSelect";
 import { errorText } from "../lib/supabase";
 import { useInjuryMutations, useInjuryReports, type InjuryReport } from "../lib/sharedData";
 import type { Member } from "../lib/types";
@@ -132,12 +133,7 @@ export function InjuryTrackerModal({
 
             {isStaff && (
               <Field label="Player">
-                <Select value={targetPersonId} disabled={!!editingId} onChange={(e) => setTargetPersonId(e.target.value)}>
-                  <option value="">Select player</option>
-                  {players.map((p) => (
-                    <option key={p.id} value={p.id}>{p.full_name}</option>
-                  ))}
-                </Select>
+                <PlayerSelect label="Player" players={players} value={targetPersonId} disabled={!!editingId} onChange={setTargetPersonId} />
               </Field>
             )}
 

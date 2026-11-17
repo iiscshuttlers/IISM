@@ -5,6 +5,8 @@ import { useSession } from "../lib/session";
 import { useAssessments, useAttendance, useDrills, useMatches, useMembers, useSessions, useStandings } from "../lib/api";
 import { Avatar, Button, Card, Chip, Empty, Input, PageTitle, ChipRow, Skeleton, cx } from "../components/ui";
 import { PlayerDetailSheet } from "../components/PlayerDetail";
+import { fuzzyFilter } from "../lib/fuzzy";
+import { TRAINING_EVENTS, eventsLabel, type TrainingEvent } from "../lib/disciplines";
 import { AssessSheet } from "../components/Assessment";
 
 type SortBy = "rating" | "coach" | "attendance" | "name";
@@ -29,6 +31,7 @@ export default function PlayersPage() {
   const assessments = useAssessments(camp.id, true);
   const [gender, setGender] = useState<"all" | "M" | "F">("all");
   const [sortBy, setSortBy] = useState<SortBy>("rating");
+  const [event, setEvent] = useState<TrainingEvent | "all" | "none">("all");
   const [search, setSearch] = useState("");
   const [assessing, setAssessing] = useState<string | null>(null);
   const [inspecting, setInspecting] = useState<string | null>(null);
@@ -63,13 +66,19 @@ export default function PlayersPage() {
     sortBy === "coach" ? (r.avgAssessment ? Number(r.avgAssessment) : -1)
       : sortBy === "attendance" ? r.attendancePct ?? -1
       : r.rating;
-  const q = search.trim().toLowerCase();
-  const rows = board
+  const q = search.trim();
+  const sorted = board
     .filter((r) => gender === "all" || r.gender === gender)
-    .filter((r) => !q || r.full_name.toLowerCase().includes(q))
+    .filter((r) => event === "all" || (event === "none" ? !r.events?.length : r.events?.includes(event)))
     .sort((a, b) => (sortBy === "name" ? a.full_name.localeCompare(b.full_name) : sortValue(b) - sortValue(a) || b.rating - a.rating));
+  // While searching, best match first (typos forgiven); otherwise the chosen sort.
+  const rows = fuzzyFilter(sorted, q, (r) => r.full_name);
   const men = board.filter((r) => r.gender === "M").length;
   const women = board.filter((r) => r.gender === "F").length;
+  // Hidden until migration 0009 has run (then every player has a list, maybe empty).
+  const hasEvents = board.some((r) => r.events !== undefined);
+  const eventCount = (e: TrainingEvent | "none") =>
+    board.filter((r) => (e === "none" ? !r.events?.length : r.events?.includes(e))).length;
   const loading = members.isLoading || standings.isLoading;
 
   return (
@@ -100,6 +109,16 @@ export default function PlayersPage() {
             <Chip key={o.value} active={sortBy === o.value} onClick={() => setSortBy(o.value)}>{o.label}</Chip>
           ))}
         </ChipRow>
+        {hasEvents && (
+          <ChipRow>
+            <span className="shrink-0 text-xs font-medium text-ink-faint">Training for</span>
+            <Chip active={event === "all"} onClick={() => setEvent("all")}>Any</Chip>
+            {TRAINING_EVENTS.map((e) => (
+              <Chip key={e.value} active={event === e.value} onClick={() => setEvent(e.value)}>{e.short} · {eventCount(e.value)}</Chip>
+            ))}
+            <Chip active={event === "none"} onClick={() => setEvent("none")}>Not set · {eventCount("none")}</Chip>
+          </ChipRow>
+        )}
       </div>
 
       {loading ? (
@@ -109,7 +128,11 @@ export default function PlayersPage() {
           <Skeleton className="h-20" />
         </div>
       ) : rows.length === 0 ? (
-        <Empty>{q ? `No player matches “${search.trim()}”.` : "No players on the roster yet. Add them in Settings."}</Empty>
+        <Empty>
+          {q ? `No player matches “${search.trim()}”.`
+            : board.length ? "No players match these filters."
+            : "No players on the roster yet. Add them in Settings."}
+        </Empty>
       ) : (
         <Card className="divide-y divide-line overflow-hidden !p-0">
           {/* Column labels for the wide layout. */}
@@ -131,6 +154,9 @@ export default function PlayersPage() {
                   <Avatar name={r.full_name} />
                   <span className="min-w-0">
                     <span className="block font-semibold leading-snug text-ink [overflow-wrap:anywhere] md:truncate">{r.full_name}</span>
+                    {r.events && r.events.length > 0 && (
+                      <span className="block text-[11px] font-semibold text-brand">{eventsLabel(r.events)}</span>
+                    )}
                     <span className="block text-xs text-ink-soft md:hidden">
                       {r.played ? `${r.won}/${r.played} won` : "No matches yet"}
                     </span>

@@ -33,3 +33,24 @@ export function rankByDiscipline<T extends Standing>(rows: T[], d: Discipline): 
   let n = 0;
   return withStats.map((x) => ({ ...x, rank: x.stat.played > 0 ? ++n : null }));
 }
+
+/** What a player is training for in this camp (migration 0009); any combination, or none yet. */
+export type TrainingEvent = Exclude<Discipline, "all">;
+
+export const TRAINING_EVENTS: { value: TrainingEvent; label: string; short: string }[] = [
+  { value: "singles", label: "Singles", short: "Singles" },
+  { value: "doubles", label: "Doubles", short: "Doubles" },
+  { value: "mixed", label: "Mixed (XD)", short: "XD" },
+];
+
+/** Always in the order singles, doubles, mixed, without repeats or unknown values. */
+export const sortEvents = (events: readonly string[]): TrainingEvent[] =>
+  TRAINING_EVENTS.map((e) => e.value).filter((v) => events.includes(v));
+
+/** "Singles · XD", or "" when none are set. */
+export const eventsLabel = (events: readonly string[] | null | undefined): string =>
+  sortEvents(events ?? []).map((v) => TRAINING_EVENTS.find((e) => e.value === v)!.short).join(" · ");
+
+/** Turns one event on or off. */
+export const toggleEvent = (events: readonly string[], e: TrainingEvent): TrainingEvent[] =>
+  sortEvents(events.includes(e) ? events.filter((x) => x !== e) : [...events, e]);
