@@ -125,7 +125,7 @@ export default function PlayersPage() {
             <span className="shrink-0 text-xs font-medium text-ink-faint">Training for</span>
             <Chip active={event === "all"} onClick={() => setEvent("all")}>Any</Chip>
             {TRAINING_EVENTS.map((e) => (
-              <Chip key={e.value} active={event === e.value} onClick={() => setEvent(e.value)}>{e.short} · {eventCount(e.value)}</Chip>
+              <Chip key={e.value} active={event === e.value} onClick={() => setEvent(e.value)}>{e.label} · {eventCount(e.value)}</Chip>
             ))}
             <Chip active={event === "none"} onClick={() => setEvent("none")}>Not set · {eventCount("none")}</Chip>
           </ChipRow>

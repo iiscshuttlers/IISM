@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { disciplineStat, eventsLabel, hasDisciplineRatings, rankByDiscipline, sortEvents, toggleEvent } from "./disciplines";
+import { categoryEvent, disciplineStat, eventsLabel, hasDisciplineRatings, rankByDiscipline, sortEvents, toggleEvent } from "./disciplines";
 import type { Standing } from "./types";
 
 const st = (id: string, over: Partial<Standing>): Standing => ({
@@ -41,9 +41,15 @@ describe("training events", () => {
   });
 
   it("labels them briefly", () => {
-    expect(eventsLabel(["mixed", "singles"])).toBe("Singles · XD");
+    expect(eventsLabel(["mixed", "singles"])).toBe("S · XD");
+    expect(eventsLabel(["doubles", "singles", "mixed"])).toBe("S · D · XD");
     expect(eventsLabel([])).toBe("");
     expect(eventsLabel(undefined)).toBe("");
+  });
+
+  it("maps a match category to its event", () => {
+    expect(["MS", "WS", "MD", "WD", "XD"].map((c) => categoryEvent(c as "MS"))).toEqual(
+      ["singles", "singles", "doubles", "doubles", "mixed"]);
   });
 
   it("toggles one on or off", () => {
