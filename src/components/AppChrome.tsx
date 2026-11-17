@@ -210,6 +210,9 @@ export function SyncEngine({ campId }: { campId: string }) {
         () => schedule("equipment"))
       .on("postgres_changes", { event: "*", schema: "public", table: "player_goals", filter: `camp_id=eq.${campId}` },
         () => schedule("goals"))
+      // Leave the admin marks (0010): attendance and the pairing helper update on every phone.
+      .on("postgres_changes", { event: "*", schema: "public", table: "player_leave", filter: `camp_id=eq.${campId}` },
+        () => schedule("leave"))
       .subscribe();
     return () => {
       if (timer.current) clearTimeout(timer.current);

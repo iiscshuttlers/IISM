@@ -8,15 +8,20 @@ import { errorText } from "../lib/supabase";
 import { rpeIsDue, useMyCheckIn, useNow } from "../lib/today";
 import type { Attendance } from "../lib/types";
 import { MatchCard } from "../components/MatchCard";
-import { LiveCourtScorer } from "../components/LiveCourtScorer";
 import { LiveCourtBoard } from "../components/LiveCourtBoard";
 import { AnnouncementBanner, AnnouncementManagerModal } from "../components/Announcements";
 import { WeatherVenueBanner } from "../components/WeatherVenuePlan";
 import { NextSessionFocusCard } from "../components/NextSessionFocusCard";
-import { SessionReflectionModal } from "../components/SessionReflection";
-import { SkillLibrarySheet } from "../components/SkillLibrary";
 import { WellnessCheckin } from "../components/WellnessCheckin";
-import { Badge, Button, Card, Section, cx } from "../components/ui";
+import { MountOnFirstOpen, lazyNamed } from "../components/Deferred";
+import { Badge, Button, Card, Section, cx, fmtDate, today } from "../components/ui";
+import { useLeave } from "../lib/sharedData";
+import { leaveOn, leaveReasonLabel } from "../lib/leave";
+
+// Sheets that open on tap load on first use, so the home screen's first download stays small.
+const LiveCourtScorer = lazyNamed(() => import("../components/LiveCourtScorer"), "LiveCourtScorer");
+const SessionReflectionModal = lazyNamed(() => import("../components/SessionReflection"), "SessionReflectionModal");
+const SkillLibrarySheet = lazyNamed(() => import("../components/SkillLibrary"), "SkillLibrarySheet");
 
 const STATUS_TEXT: Record<Attendance["status"], string> = {
   present: "You're checked in",
@@ -42,6 +47,9 @@ export default function PlayerTodayPage() {
   const standings = useStandings(campId);
   const squad = useSquad(campId);
   const matchMut = useMatchMutations(campId);
+  // Leave the admin marked for me (0010): shown so I know it's recorded.
+  const leave = useLeave(campId);
+  const myLeave = meId ? leaveOn(leave.data ?? [], meId, today()) : undefined;
 
   const [changingStatus, setChangingStatus] = useState(false);
   const [liveScoring, setLiveScoring] = useState(false);
@@ -116,6 +124,12 @@ export default function PlayerTodayPage() {
       <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:items-start lg:gap-8">
         <div className="contents lg:flex lg:flex-col lg:gap-6">
           <Section className="order-1" title="Check in">
+            {myLeave && (
+              <p className="mb-2 rounded-xl bg-surface-2/70 px-3 py-2 text-xs text-ink-soft">
+                <span className="font-semibold text-ink">You're on leave until {fmtDate(myLeave.ends_on)}</span>{" "}
+                ({leaveReasonLabel(myLeave.reason).toLowerCase()}). Missed sessions on those days don't count against your attendance.
+              </p>
+            )}
             <Card className={cx(showCheckInButtons ? "" : "p-3.5")}>
               {showCheckInButtons ? (
                 <>
@@ -296,26 +310,32 @@ export default function PlayerTodayPage() {
         </div>
       </div>
 
-      <LiveCourtScorer
-        open={liveScoring}
-        onClose={() => setLiveScoring(false)}
-        players={players}
-        onSaveMatch={async (m) => {
-          const r = await matchMut.record.mutateAsync(m);
-          if (r.queued) toast.success("No signal: saved on this phone. It will send automatically.");
-        }}
-        busy={matchMut.record.isPending}
-      />
+      <MountOnFirstOpen when={liveScoring}>
+        <LiveCourtScorer
+          open={liveScoring}
+          onClose={() => setLiveScoring(false)}
+          players={players}
+          onSaveMatch={async (m) => {
+            const r = await matchMut.record.mutateAsync(m);
+            if (r.queued) toast.success("No signal: saved on this phone. It will send automatically.");
+          }}
+          busy={matchMut.record.isPending}
+        />
+      </MountOnFirstOpen>
       <AnnouncementManagerModal campId={campId} open={announcementsOpen} onClose={() => setAnnouncementsOpen(false)} members={people} />
-      <SessionReflectionModal
-        open={reflectionOpen}
-        onClose={() => setReflectionOpen(false)}
-        campId={campId}
-        personId={meId}
-        playerName={myName}
-        sessions={checkIn.sessions.data ?? []}
-      />
-      <SkillLibrarySheet open={skillsOpen} onClose={() => setSkillsOpen(false)} campId={campId} currentPersonId={meId} isStaff={false} />
+      <MountOnFirstOpen when={reflectionOpen}>
+        <SessionReflectionModal
+          open={reflectionOpen}
+          onClose={() => setReflectionOpen(false)}
+          campId={campId}
+          personId={meId}
+          playerName={myName}
+          sessions={checkIn.sessions.data ?? []}
+        />
+      </MountOnFirstOpen>
+      <MountOnFirstOpen when={skillsOpen}>
+        <SkillLibrarySheet open={skillsOpen} onClose={() => setSkillsOpen(false)} campId={campId} currentPersonId={meId} isStaff={false} />
+      </MountOnFirstOpen>
     </div>
   );
 }

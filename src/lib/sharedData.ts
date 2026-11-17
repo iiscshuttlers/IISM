@@ -5,6 +5,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { must, supabase } from "./supabase";
 import type { SkillTechnique } from "./campExtended";
+import type { PlayerLeave } from "./leave";
+import type { ShortlistWeights } from "./shortlist";
 
 // ───────── Types ─────────
 
@@ -480,4 +482,66 @@ export function useNextFocusMutations(campId: string) {
       onSuccess: after,
     }),
   };
+}
+
+// ───────── Leave (migration 0010) ─────────
+
+/** Staff get everyone's leave; a player gets only their own (enforced by the database). */
+export const useLeave = (campId: string | undefined) =>
+  useQuery({
+    queryKey: ["leave", campId],
+    enabled: !!campId,
+    queryFn: async () =>
+      must(
+        await supabase
+          .from("player_leave")
+          .select("id, camp_id, person_id, starts_on, ends_on, reason, note, created_at")
+          .eq("camp_id", campId!)
+          .order("starts_on"),
+      ) as PlayerLeave[],
+  });
+
+type LeaveInput = Pick<PlayerLeave, "person_id" | "starts_on" | "ends_on" | "reason" | "note">;
+
+/** Camp admin only. Who added or changed it is recorded by the database. */
+export function useLeaveMutations(campId: string) {
+  const inv = useInvalidate();
+  const after = () => inv("leave");
+  return {
+    save: useMutation({
+      mutationFn: async ({ id, ...r }: LeaveInput & { id?: string }) =>
+        id
+          ? must(await supabase.from("player_leave").update(r).eq("id", id))
+          : must(await supabase.from("player_leave").insert({ camp_id: campId, ...r })),
+      onSuccess: after,
+    }),
+    remove: useMutation({
+      mutationFn: async (id: string) => must(await supabase.from("player_leave").delete().eq("id", id)),
+      onSuccess: after,
+    }),
+  };
+}
+
+// ───────── Shortlist weights (migration 0010, camp admin only) ─────────
+
+/** The admin's saved weights, or null when they haven't saved any yet. */
+export const useShortlistWeights = (campId: string | undefined, enabled: boolean) =>
+  useQuery({
+    queryKey: ["shortlistWeights", campId],
+    enabled: !!campId && enabled,
+    queryFn: async () => {
+      const rows = must(
+        await supabase.from("shortlist_weights").select("rating, coach_score, attendance, win_rate").eq("camp_id", campId!),
+      ) as ShortlistWeights[];
+      return rows[0] ?? null;
+    },
+  });
+
+export function useSaveShortlistWeights(campId: string) {
+  const inv = useInvalidate();
+  return useMutation({
+    mutationFn: async (w: ShortlistWeights) =>
+      must(await supabase.from("shortlist_weights").upsert({ camp_id: campId, ...w }, { onConflict: "camp_id" })),
+    onSuccess: () => inv("shortlistWeights"),
+  });
 }

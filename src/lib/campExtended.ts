@@ -74,11 +74,15 @@ function setStorage<T>(key: string, value: T): void {
   }
 }
 
+/**
+ * Forgets what this module saved, and nothing else. The sign-in session, the offline match
+ * queue and other sites on the same github.io origin share this storage, so never clear() it.
+ */
 export function clearExtendedStorage(): void {
   memStore.clear();
   try {
-    if (typeof localStorage !== "undefined" && localStorage && typeof localStorage.clear === "function") {
-      localStorage.clear();
+    if (typeof localStorage !== "undefined" && localStorage && typeof localStorage.removeItem === "function") {
+      localStorage.removeItem(A11Y_KEY);
     }
   } catch {
     // ignore

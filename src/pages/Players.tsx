@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { LineChart, Search } from "lucide-react";
+import { LineChart, ListOrdered, Search } from "lucide-react";
 import { useSession } from "../lib/session";
 import { useAssessments, useAttendance, useDrills, useMatches, useMembers, useSessions, useStandings } from "../lib/api";
 import { Avatar, Button, Card, Chip, Empty, Input, PageTitle, ChipRow, Skeleton, cx } from "../components/ui";
@@ -8,6 +8,8 @@ import { PlayerDetailSheet } from "../components/PlayerDetail";
 import { fuzzyFilter } from "../lib/fuzzy";
 import { TRAINING_EVENTS, eventsLabel, type TrainingEvent } from "../lib/disciplines";
 import { AssessSheet } from "../components/Assessment";
+import { useLeave } from "../lib/sharedData";
+import { attendanceSummary } from "../lib/leave";
 
 type SortBy = "rating" | "coach" | "attendance" | "name";
 const SORTS: { value: SortBy; label: string }[] = [
@@ -29,6 +31,7 @@ export default function PlayersPage() {
   const drills = useDrills(ids);
   const attendance = useAttendance(ids);
   const assessments = useAssessments(camp.id, true);
+  const leave = useLeave(camp.id);
   const [gender, setGender] = useState<"all" | "M" | "F">("all");
   const [sortBy, setSortBy] = useState<SortBy>("rating");
   const [event, setEvent] = useState<TrainingEvent | "all" | "none">("all");
@@ -38,7 +41,6 @@ export default function PlayersPage() {
 
   const board = useMemo(() => {
     const players = (members.data ?? []).filter((m) => m.role === "player");
-    const sessCount = (sessions.data ?? []).length;
     const minutesBySession: Record<string, number> = {};
     for (const d of drills.data ?? []) minutesBySession[d.session_id] = (minutesBySession[d.session_id] ?? 0) + (d.duration_min ?? 0);
     return players.map((p) => {
@@ -53,14 +55,15 @@ export default function PlayersPage() {
         rating: st?.rating ?? 1200,
         played: st?.played ?? 0,
         won: st?.won ?? 0,
-        attendancePct: sessCount ? Math.round((100 * attended.length) / sessCount) : null,
+        // Sessions missed on leave the admin marked don't count against them.
+        attendancePct: attendanceSummary(p.id, sessions.data ?? [], attendance.data ?? [], leave.data ?? []).pct,
         drillMinutes: attended.reduce((t, a) => t + (minutesBySession[a.session_id] ?? 0), 0),
         avgRpe: rpes.length ? (rpes.reduce((a, b) => a + b, 0) / rpes.length).toFixed(1) : null,
         avgAssessment: scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : null,
         assessmentCount: asmt.length,
       };
     });
-  }, [members.data, standings.data, sessions.data, drills.data, attendance.data, assessments.data]);
+  }, [members.data, standings.data, sessions.data, drills.data, attendance.data, assessments.data, leave.data]);
 
   const sortValue = (r: (typeof board)[number]): number =>
     sortBy === "coach" ? (r.avgAssessment ? Number(r.avgAssessment) : -1)
@@ -86,9 +89,17 @@ export default function PlayersPage() {
       <PageTitle
         sub={`${board.length} players`}
         action={
-          <Link href="/insights">
-            <Button variant="secondary"><LineChart size={16} /> Compare</Button>
-          </Link>
+          <div className="flex gap-2">
+            {/* The weighted shortlist is for the camp admin only. */}
+            {s.isAdmin && (
+              <Link href="/shortlist">
+                <Button variant="secondary"><ListOrdered size={16} /> Shortlist</Button>
+              </Link>
+            )}
+            <Link href="/insights">
+              <Button variant="secondary"><LineChart size={16} /> Compare</Button>
+            </Link>
+          </div>
         }
       >
         Players

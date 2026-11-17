@@ -57,6 +57,11 @@ At the end of every session, players or coaches log an RPE score from **1 to 10*
 
 Consistent RPE logging helps coaches monitor fatigue, prevent injuries, and assess dedication.
 
+### Leave and exams
+- **Players:** Away for exams, illness or travel? Tell the camp admin before you go. Once it's marked, you'll see it on your Today screen.
+- **Admin:** Mark it in **Settings → Leave and exams** (player, first and last day, reason). Only the admin can add, change or remove leave; coaches and the player can see it.
+- **What it changes:** Sessions missed on those days don't count against the player's attendance. On Today their name shows **Leave**, they're left out of **All present** and the not-marked count, and the pairing helper skips them. If they turn up anyway, mark them present as usual.
+
 ---
 
 ## 4. Standings & Ratings
@@ -77,3 +82,4 @@ Consistent RPE logging helps coaches monitor fatigue, prevent injuries, and asse
 - **Training for:** On a player's profile, coaches tap **Singles**, **Doubles** and/or **Mixed (XD)** — any combination. It shows under their name in the Players list and next to their name when picking players.
 - **Finding a player:** Every player picker has a search box that forgives typos — typing "Rsja" still finds Raja, and "rk" finds Raja Kumar.
 - **Assessments:** Coaches score players on **Technique**, **Fitness**, **Tactics**, and **Attitude** (1–5 scale) with **Assess**. Players never see these scores.
+- **Shortlist (admin only):** **Players → Shortlist** ranks every player by one score out of 100 built from rating, coach score, attendance (leave excluded) and win %. Slide how much each counts and save. Coaches and players can't see the page or the weights. It's a guide for the selection conversation, not the decision.
