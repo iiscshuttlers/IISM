@@ -1,4 +1,5 @@
 import type { Category, Gender } from "./scores";
+import type { TrainingEvent } from "./disciplines";
 
 export type Role = "admin" | "coach" | "player";
 
@@ -27,6 +28,8 @@ export interface Person {
 export interface Member extends Person {
   role: Role;
   activity_muted: boolean;
+  /** What they're training for in this camp (migration 0009; undefined before it runs). */
+  events?: TrainingEvent[];
 }
 
 export interface RosterAdminRow {

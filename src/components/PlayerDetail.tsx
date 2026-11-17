@@ -1,6 +1,10 @@
 import { useState, useMemo } from "react";
 import { Dumbbell, ArrowRightLeft, FileText, TrendingUp, MessageSquare } from "lucide-react";
-import { Badge, Button, Card, Sheet } from "./ui";
+import { toast } from "sonner";
+import { Badge, Button, Card, Sheet, cx } from "./ui";
+import { useSetMemberEvents } from "../lib/api";
+import { errorText } from "../lib/supabase";
+import { TRAINING_EVENTS, toggleEvent } from "../lib/disciplines";
 import { CATEGORIES } from "../lib/scores";
 import { SkillRadar } from "./SkillRadar";
 import { PlayerReportCardModal } from "./PlayerReportCard";
@@ -111,6 +115,10 @@ export function PlayerDetailSheet({
               </div>
             )}
           </div>
+
+          {member.role === "player" && (isStaff || (member.events?.length ?? 0) > 0) && (
+            <TrainingFor member={member} campId={campId} canEdit={isStaff} />
+          )}
 
           {/* Quick Actions */}
           <div className="mt-3 pt-3 border-t border-line flex flex-wrap items-center justify-end gap-2">
@@ -423,5 +431,48 @@ export function PlayerDetailSheet({
         />
       )}
     </Sheet>
+  );
+}
+
+/** Singles, doubles, mixed: staff tap to turn each on or off; everyone else just sees them. */
+function TrainingFor({ member, campId, canEdit }: { member: Member; campId?: string; canEdit: boolean }) {
+  const save = useSetMemberEvents(campId ?? "");
+  const events = member.events;
+  const editable = canEdit && !!campId && events !== undefined;
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5" role="group" aria-label="Training for">
+      <span className="text-xs font-semibold text-ink-soft">Training for</span>
+      {events === undefined ? (
+        <span className="text-xs text-ink-faint">Turns on once the database update 0009_training_events.sql is run.</span>
+      ) : (
+        TRAINING_EVENTS.map((e) => {
+          const on = events.includes(e.value);
+          if (!editable && !on) return null;
+          return editable ? (
+            <button
+              key={e.value}
+              type="button"
+              aria-pressed={on}
+              onClick={() =>
+                save.mutate(
+                  { person_id: member.id, events: toggleEvent(events, e.value) },
+                  { onError: (err) => toast.error(errorText(err)) },
+                )
+              }
+              className={cx(
+                "inline-flex h-8 items-center rounded-full px-3 text-xs font-semibold transition-[background-color,color,transform] duration-150 active:scale-95",
+                on ? "bg-brand text-white" : "bg-surface text-ink-soft ring-1 ring-line hover:text-ink",
+              )}
+            >
+              {e.label}
+            </button>
+          ) : (
+            <Badge key={e.value} tone="brand">{e.label}</Badge>
+          );
+        })
+      )}
+      {editable && events.length === 0 && <span className="text-xs text-ink-faint">Not set yet</span>}
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
-import { Shuffle, Play, CheckSquare, Square, Crown } from "lucide-react";
-import { Button, Card, Segmented, Sheet } from "./ui";
+import { Shuffle, Play, CheckSquare, Square, Crown, Search } from "lucide-react";
+import { Button, Card, Input, Segmented, Sheet } from "./ui";
+import { fuzzyFilter } from "../lib/fuzzy";
 import type { Member } from "../lib/types";
 import type { Category } from "../lib/scores";
 
@@ -24,6 +25,8 @@ export function TournamentGeneratorModal({
   const [format, setFormat] = useState<"round_robin" | "king_of_court">("round_robin");
   const [selectedIds, setSelectedIds] = useState<string[]>(() => players.slice(0, 6).map((p) => p.id));
   const [fixtures, setFixtures] = useState<ScheduledFixture[]>([]);
+  const [query, setQuery] = useState("");
+  const shown = useMemo(() => fuzzyFilter(players, query, (p) => p.full_name), [players, query]);
 
   const togglePlayer = (id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -116,8 +119,24 @@ export function TournamentGeneratorModal({
             </div>
           </div>
 
+          {players.length > 8 && (
+            <div className="relative">
+              <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" aria-hidden />
+              <Input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search players"
+                aria-label="Search players"
+                autoComplete="off"
+                spellCheck={false}
+                className="!py-1.5 pl-8 text-base sm:text-sm"
+              />
+            </div>
+          )}
+          {shown.length === 0 && <p className="py-2 text-center text-xs text-ink-soft">No player matches “{query.trim()}”.</p>}
           <div className="grid grid-cols-2 gap-1.5 max-h-44 overflow-y-auto pt-1">
-            {players.map((p) => {
+            {shown.map((p) => {
               const selected = selectedIds.includes(p.id);
               return (
                 <button

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { Avatar, Button, Field, Input, Segmented, cx, today } from "./ui";
 import {
   CATEGORIES, GAME_POINTS, isSingles, parseGames, quickGamesToRows, slotGenders, validatePlayers,
@@ -9,6 +9,7 @@ import {
 import type { Match, Member } from "../lib/types";
 import type { MatchInput } from "../lib/api";
 import { errorText } from "../lib/supabase";
+import { fuzzyFilter } from "../lib/fuzzy";
 
 type Format = "1_set" | "best_of_3" | "best_of_5";
 const GAMES_IN: Record<Format, number> = { "1_set": 1, best_of_3: 3, best_of_5: 5 };
@@ -76,6 +77,7 @@ export function MatchForm({
   );
   const [activePick, setActivePick] = useState<number | null>(null);
   const [showAllPlayers, setShowAllPlayers] = useState(false);
+  const [pickQuery, setPickQuery] = useState("");
   const [playedOn, setPlayedOn] = useState(initial?.played_on ?? today());
 
   const [format, setFormat] = useState<Format>(() => {
@@ -164,8 +166,13 @@ export function MatchForm({
     : players.filter((p) => (!want[pickSlot] || !p.gender || p.gender === want[pickSlot]) && !slots.includes(p.id));
   const here = eligible.filter((p) => present.has(p.id));
   const notHere = eligible.filter((p) => !present.has(p.id));
-  const collapse = present.size > 0 && here.length > 0 && !showAllPlayers;
-  const listed = collapse ? here : [...here, ...notHere];
+  // Searching looks through everyone who fits the slot, checked in or not.
+  const searching = pickQuery.trim() !== "";
+  const collapse = present.size > 0 && here.length > 0 && !showAllPlayers && !searching;
+  const listed = searching
+    ? fuzzyFilter([...here, ...notHere], pickQuery, (p) => p.full_name)
+    : collapse ? here : [...here, ...notHere];
+  const showSearch = eligible.length > 8 || searching;
 
   const pick = (id: string) => {
     if (pickSlot === undefined) return;
@@ -174,6 +181,7 @@ export function MatchForm({
     setSlots(next);
     setActivePick(null);
     setShowAllPlayers(false);
+    setPickQuery("");
   };
   const clearSlot = (i: number) => {
     const id = slots[i];
@@ -311,8 +319,30 @@ export function MatchForm({
               Tap to add to <span className="text-brand">{slotTitle(pickSlot)}</span>
               {present.size > 0 && here.length > 0 && collapse && " · checked in today"}
             </p>
+            {showSearch && (
+              <div className="relative mb-2">
+                <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" aria-hidden />
+                <Input
+                  type="search"
+                  value={pickQuery}
+                  onChange={(e) => setPickQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); if (searching && listed[0]) pick(listed[0].id); }
+                  }}
+                  placeholder="Search players"
+                  aria-label={`Search players for ${slotTitle(pickSlot)}`}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="!py-1.5 pl-8 text-base sm:text-sm"
+                />
+              </div>
+            )}
             {listed.length === 0 ? (
-              <p className="text-xs text-ink-soft">No one else fits this slot for {CATEGORIES.find((c) => c.value === category)?.label.toLowerCase()}.</p>
+              <p className="text-xs text-ink-soft">
+                {searching
+                  ? `No player matches “${pickQuery.trim()}” for this slot.`
+                  : `No one else fits this slot for ${CATEGORIES.find((c) => c.value === category)?.label.toLowerCase()}.`}
+              </p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {listed.map((p) => (

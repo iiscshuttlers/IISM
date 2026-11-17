@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Check, Package, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge, Button, Card, ConfirmDialog, Field, Input, Select, Sheet } from "./ui";
+import { PlayerSelect } from "./PlayerSelect";
 import { useSession } from "../lib/session";
 import { errorText } from "../lib/supabase";
 import { useEquipment, useEquipmentMutations, type EquipmentItem } from "../lib/sharedData";
@@ -180,12 +181,7 @@ export function EquipmentTrackerModal({
 
               {status === "borrowed" ? (
                 <Field label="Borrowed by">
-                  <Select value={borrowedBy} onChange={(e) => setBorrowedBy(e.target.value)}>
-                    <option value="">Select player</option>
-                    {players.map((p) => (
-                      <option key={p.id} value={p.id}>{p.full_name}</option>
-                    ))}
-                  </Select>
+                  <PlayerSelect label="Borrowed by" players={players} value={borrowedBy} onChange={setBorrowedBy} allowClear />
                 </Field>
               ) : (
                 <Field label="Notes (optional)">

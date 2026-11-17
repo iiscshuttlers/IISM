@@ -18,6 +18,7 @@ import { Button, Card, Chip, ConfirmDialog, Empty, Field, Input, PageTitle, Chip
 import type { Category } from "../lib/scores";
 import type { Match } from "../lib/types";
 import { useTodayAttendance } from "../lib/today";
+import { fuzzyScore } from "../lib/fuzzy";
 
 export default function MatchesPage() {
   const s = useSession();
@@ -166,9 +167,9 @@ export default function MatchesPage() {
     if (filter === "disputed" && m.status !== "disputed") return false;
     if (catFilter !== "ALL" && m.category !== catFilter) return false;
     if (search.trim()) {
-      const q = search.toLowerCase().trim();
+      // Every word typed must match one of the four players (typos forgiven).
       const names = [m.t1_p1, m.t1_p2, m.t2_p1, m.t2_p2].map((id) => (id ? memberMap.get(id) ?? "" : "")).join(" ");
-      if (!names.includes(q)) return false;
+      if (fuzzyScore(search, names) === null) return false;
     }
     return true;
   });

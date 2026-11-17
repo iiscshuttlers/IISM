@@ -6,6 +6,7 @@ import type {
   RosterAdminRow, SelectionRow, Session, SquadRow, Standing, Wellness,
 } from "./types";
 import type { Category } from "./scores";
+import { sortEvents, type TrainingEvent } from "./disciplines";
 
 // "*" rather than a column list so a newer column (e.g. court_count from 0005) can't break
 // loading the camp if the site deploys before its migration has been run.
@@ -39,9 +40,10 @@ export const useMembers = (campId: string | undefined) =>
     queryKey: ["members", campId],
     enabled: !!campId,
     queryFn: async (): Promise<Member[]> => {
+      // "*" so the roster still loads before migration 0009 adds `events`.
       const rows = must(
-        await supabase.from("camp_members").select("person_id, role, activity_muted").eq("camp_id", campId!),
-      ) as { person_id: string; role: Role; activity_muted: boolean }[];
+        await supabase.from("camp_members").select("*").eq("camp_id", campId!),
+      ) as { person_id: string; role: Role; activity_muted: boolean; events?: string[] | null }[];
       const ids = rows.map((r) => r.person_id);
       const people = ids.length
         ? (must(await supabase.from("people").select("id, full_name, gender").in("id", ids)) as Person[])
@@ -49,10 +51,28 @@ export const useMembers = (campId: string | undefined) =>
       const byId = Object.fromEntries(people.map((p) => [p.id, p]));
       return rows
         .filter((r) => byId[r.person_id])
-        .map((r) => ({ ...byId[r.person_id], role: r.role, activity_muted: r.activity_muted }))
+        .map((r) => ({
+          ...byId[r.person_id], role: r.role, activity_muted: r.activity_muted,
+          ...(r.events !== undefined ? { events: sortEvents(r.events ?? []) } : {}),
+        }))
         .sort((a, b) => a.full_name.localeCompare(b.full_name));
     },
   });
+
+/** Staff set what a player is training for (singles, doubles, mixed; any mix). */
+export function useSetMemberEvents(campId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (a: { person_id: string; events: TrainingEvent[] }) =>
+      must(await supabase.rpc("set_member_events", { p_camp: campId, p_person: a.person_id, p_events: a.events })),
+    // Shown at once; a failed save puts the list back as the server has it.
+    onMutate: (a) => {
+      qc.setQueryData<Member[]>(["members", campId], (old) =>
+        old?.map((m) => (m.id === a.person_id ? { ...m, events: a.events } : m)));
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["members", campId] }),
+  });
+}
 
 export const useRosterAdmin = (campId: string | undefined, enabled: boolean) =>
   useQuery({

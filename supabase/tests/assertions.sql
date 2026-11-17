@@ -1267,4 +1267,42 @@ END $$;
 RESET ROLE;
 DELETE FROM net.http_request_queue;
 
+-- 0009. Training events: staff set them, stored in a fixed order; players read but can't write.
+SELECT pg_temp.as_user(:u_coach, 'coach@x.test');
+DO $$ DECLARE c uuid := (SELECT v FROM ids WHERE k='camp'); p1 uuid := (SELECT v FROM ids WHERE k='p1');
+BEGIN
+  PERFORM public.set_member_events(c, p1, ARRAY['mixed', 'singles', 'mixed']);
+  IF (SELECT events FROM public.camp_members WHERE camp_id = c AND person_id = p1) <> ARRAY['singles', 'mixed'] THEN
+    RAISE EXCEPTION 'events not stored in order without repeats';
+  END IF;
+  BEGIN PERFORM public.set_member_events(c, p1, ARRAY['triples']);
+    RAISE EXCEPTION 'unknown event accepted';
+  EXCEPTION WHEN raise_exception THEN IF SQLERRM <> 'invalid_event' THEN RAISE; END IF; END;
+  BEGIN PERFORM public.set_member_events(c, (SELECT v FROM ids WHERE k='admin'), ARRAY['doubles']);
+  EXCEPTION WHEN raise_exception THEN RAISE EXCEPTION 'staff could not set the admin''s events: %', SQLERRM; END;
+  BEGIN PERFORM public.set_member_events(c, gen_random_uuid(), ARRAY['doubles']);
+    RAISE EXCEPTION 'events set for someone outside the camp';
+  EXCEPTION WHEN raise_exception THEN IF SQLERRM <> 'not_in_camp' THEN RAISE; END IF; END;
+END $$;
+SELECT pg_temp.as_user(:u_p2, 'p2@x.test');
+DO $$ DECLARE c uuid := (SELECT v FROM ids WHERE k='camp');
+BEGIN
+  IF (SELECT events FROM public.camp_members WHERE camp_id = c AND person_id = (SELECT v FROM ids WHERE k='p1'))
+     <> ARRAY['singles', 'mixed'] THEN RAISE EXCEPTION 'player cannot read events'; END IF;
+  BEGIN PERFORM public.set_member_events(c, (SELECT v FROM ids WHERE k='p2'), ARRAY['singles']);
+    RAISE EXCEPTION 'player set their own events';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN UPDATE public.camp_members SET events = ARRAY['doubles'] WHERE camp_id = c;
+    RAISE EXCEPTION 'player updated camp_members directly';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET ROLE;
+SET ROLE anon;
+DO $$ BEGIN
+  PERFORM public.set_member_events(gen_random_uuid(), gen_random_uuid(), ARRAY['singles']);
+  RAISE EXCEPTION 'signed-out caller set events';
+EXCEPTION WHEN insufficient_privilege THEN NULL;
+END $$;
+RESET ROLE;
+
 SELECT 'ALL TRAINING CAMP ASSERTIONS PASSED' AS result;
