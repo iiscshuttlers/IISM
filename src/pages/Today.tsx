@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Plus, LineChart, Radio, Sparkles, Calendar,
@@ -62,8 +62,11 @@ export default function TodayPage() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
-  /** Player whose attendance options are open (tap a marked chip). */
-  const [attendanceFor, setAttendanceFor] = useState<string | null>(null);
+  /** Taps still saving: the status shown until the server agrees (null = being cleared). */
+  const [pending, setPending] = useState<Record<string, Attendance["status"] | null>>({});
+  const tapSeq = useRef<Record<string, number>>({});
+  /** Player whose check-in is about to be cleared along with an effort rating. */
+  const [confirmClear, setConfirmClear] = useState<string | null>(null);
   const [confirmUnmarkAll, setConfirmUnmarkAll] = useState(false);
 
   const sessions = useSessions(campId);
@@ -108,7 +111,19 @@ export default function TodayPage() {
     () => playerMembers.filter((p) => !awayToday.has(p.id) || attendanceMap[p.id] === "present" || attendanceMap[p.id] === "late"),
     [playerMembers, awayToday, attendanceMap],
   );
-  const onLeaveUnmarked = playerMembers.filter((p) => awayToday.has(p.id) && !attendanceMap[p.id]);
+
+  // The register: present, late, away, on leave, then not marked; A–Z within each. Sorting uses
+  // the tapped status straight away, so a row moves once instead of again when the save lands.
+  const register = useMemo(() => {
+    const rank = { present: 0, late: 1, absent: 2 } as const;
+    return playerMembers
+      .map((p) => {
+        const status = (p.id in pending ? pending[p.id] : attendanceMap[p.id]) ?? null;
+        const leaveRow = awayToday.get(p.id) ?? null;
+        return { p, status, leave: leaveRow, order: status ? rank[status] : leaveRow ? 3 : 4 };
+      })
+      .sort((a, b) => a.order - b.order || a.p.full_name.localeCompare(b.p.full_name));
+  }, [playerMembers, pending, attendanceMap, awayToday]);
 
   // Current user's attendance record for today's first session
   const myTodayAtt = todaySession
@@ -174,30 +189,37 @@ export default function TodayPage() {
   const handleUnmarkAll = () => {
     if (!todaySession) return;
     setConfirmUnmarkAll(false);
-    setAttendanceFor(null);
     trainingMut.clearSessionAttendance.mutate(todaySession.id, {
       onSuccess: () => toast.success("Attendance cleared for today"),
       onError: onErr,
     });
   };
 
-  /** Unmarked player: one tap marks them present. Marked player: open the options instead of cycling. */
-  const handleChipTap = (playerId: string) => {
-    if (!attendanceMap[playerId]) {
-      setAttendanceFor(null);
-      setStatusFor(playerId, "present").then(() => toast.success(`${nameOf(playerId)}: present`)).catch(onErr);
-    } else {
-      setAttendanceFor((cur) => (cur === playerId ? null : playerId));
-    }
+  /** Shows the new status at once and saves it; a later tap on the same row wins. */
+  const commitStatus = (playerId: string, next: Attendance["status"] | null) => {
+    const n = (tapSeq.current[playerId] ?? 0) + 1;
+    tapSeq.current[playerId] = n;
+    setPending((m) => ({ ...m, [playerId]: next }));
+    (next ? setStatusFor(playerId, next) : clearFor(playerId))
+      .catch(onErr)
+      .finally(() => {
+        if (tapSeq.current[playerId] !== n) return;
+        setPending((m) => {
+          const rest = { ...m };
+          delete rest[playerId];
+          return rest;
+        });
+      });
   };
 
-  const applyChoice = (playerId: string, choice: Attendance["status"] | "clear") => {
-    setAttendanceFor(null);
-    const run = choice === "clear" ? clearFor(playerId) : setStatusFor(playerId, choice);
-    run
-      .then(() => toast.success(`${nameOf(playerId)}: ${choice === "clear" ? "unmarked" : STATUS_LABEL[choice].toLowerCase()}`))
-      .catch(onErr);
+  /** Tap a status to set it; tap the lit one again to clear (asks first if it would drop an effort rating). */
+  const handleRegisterTap = (playerId: string, st: Attendance["status"], current: Attendance["status"] | null) => {
+    if (current !== st) return commitStatus(playerId, st);
+    const rpe = todaySession ? attendanceOf(todaySession.id, playerId)?.rpe : null;
+    if (rpe != null) setConfirmClear(playerId);
+    else commitStatus(playerId, null);
   };
+  const confirmClearRpe = confirmClear && todaySession ? attendanceOf(todaySession.id, confirmClear)?.rpe : null;
 
   // Roster breakdown
   const presentCount = playerMembers.filter((p) => attendanceMap[p.id] === "present").length;
@@ -283,13 +305,6 @@ export default function TodayPage() {
                   </div>
                 ))}
               </div>
-              {onLeaveUnmarked.length > 0 && (
-                <p className="text-xs text-ink-soft">
-                  <span className="font-semibold text-ink">On leave today:</span>{" "}
-                  {onLeaveUnmarked.map((p) => `${p.full_name} (${leaveReasonLabel(awayToday.get(p.id)!.reason).toLowerCase()})`).join(", ")}
-                </p>
-              )}
-
               {s.meId && (
                 <div className="flex items-center gap-2">
                   <span className="w-9 shrink-0 text-xs font-semibold text-ink-soft">You</span>
@@ -336,75 +351,42 @@ export default function TodayPage() {
                   )}
                 </div>
               </div>
-          <div className="flex flex-wrap gap-1.5">
-            {playerMembers.map((p) => {
-              const status = attendanceMap[p.id];
-              const away = !status && awayToday.has(p.id);
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => handleChipTap(p.id)}
-                  aria-expanded={status ? attendanceFor === p.id : undefined}
-                  title={status ? `${STATUS_LABEL[status]}. Tap for options` : away ? "On leave today. Tap to mark present if they came" : "Tap to mark present"}
-                  className={`inline-flex min-h-[36px] items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition cursor-pointer active:scale-95 ${attendanceFor === p.id ? "ring-2 ring-brand " : ""}${
-                    status === "present"
-                      ? "bg-status-success-bg text-status-success-text border-status-success-border font-semibold shadow-2xs"
-                      : status === "late"
-                      ? "bg-status-warn-bg text-status-warn-text border-status-warn-border"
-                      : status === "absent"
-                      ? "bg-status-danger-bg/60 text-status-danger-text border-status-danger-border opacity-70 line-through"
-                      : away
-                      ? "border-dashed bg-surface text-ink-faint border-line"
-                      : "bg-surface-2 text-ink-soft border-line hover:border-brand/40"
-                  }`}
-                >
-                  <Avatar name={p.full_name} size="xs" />
-                  <span>{p.full_name}</span>
-                  <span className="text-[10px] font-bold opacity-80">
-                    {status === "present" ? "✓" : status === "late" ? "⏳" : status === "absent" ? "✕" : away ? "Leave" : "+"}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          {attendanceFor && attendanceMap[attendanceFor] && (() => {
-            const cur = attendanceOf(todaySession?.id ?? "", attendanceFor);
-            return (
-              <div className="mt-3 rounded-xl border border-brand/40 bg-brand-pale/30 p-2.5">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-ink">{nameOf(attendanceFor)}</p>
-                  <button type="button" onClick={() => setAttendanceFor(null)} aria-label="Close options" className="px-1 text-xs text-ink-soft hover:text-ink">✕</button>
-                </div>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {(["present", "late", "absent"] as const).map((st) => (
-                    <button
-                      key={st}
-                      type="button"
-                      onClick={() => applyChoice(attendanceFor, st)}
-                      aria-pressed={attendanceMap[attendanceFor] === st}
-                      className={`min-h-[40px] rounded-lg border text-xs font-semibold ${attendanceMap[attendanceFor] === st ? "border-brand-border bg-brand-pale text-brand" : "border-line bg-surface text-ink"}`}
-                    >
-                      {STATUS_LABEL[st]}
-                    </button>
+              {/* Register: one row per player, sorted by status. Two columns once the card is wide enough. */}
+              <div className="@container -mt-1">
+                <ul className="@2xl:columns-2 @2xl:gap-x-6">
+                  {register.map(({ p, status, leave: away }) => (
+                    <li key={p.id} className="flex break-inside-avoid items-center gap-2.5 border-b border-line/70 py-1.5 last:border-b-0">
+                      <span className="hidden @xs:block"><Avatar name={p.full_name} size="sm" /></span>
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words text-[13px] font-medium leading-snug text-ink">{p.full_name}</p>
+                        {away && (
+                          <p className="text-[11px] leading-tight text-ink-faint">On leave · {leaveReasonLabel(away.reason)}</p>
+                        )}
+                      </div>
+                      <div role="group" aria-label={`${p.full_name}: attendance`} className="flex shrink-0 gap-1">
+                        {(["present", "late", "absent"] as const).map((st) => (
+                          <button
+                            key={st}
+                            type="button"
+                            onClick={() => handleRegisterTap(p.id, st, status)}
+                            aria-pressed={status === st}
+                            title={status === st ? "Tap again to clear" : `Mark ${STATUS_LABEL[st].toLowerCase()}`}
+                            className={cx(
+                              "min-h-[36px] rounded-lg border px-2 text-xs font-semibold transition active:scale-95 @sm:px-2.5",
+                              status === st ? STATUS_TONE[st] : "border-line bg-surface text-ink-soft hover:bg-surface-2 hover:text-ink",
+                            )}
+                          >
+                            {STATUS_LABEL[st]}
+                          </button>
+                        ))}
+                      </div>
+                    </li>
                   ))}
-                  <button
-                    type="button"
-                    onClick={() => applyChoice(attendanceFor, "clear")}
-                    className="min-h-[40px] rounded-lg border border-line bg-surface text-xs font-semibold text-status-danger-text"
-                  >
-                    Clear
-                  </button>
-                </div>
-                {cur?.rpe != null && (
-                  <p className="mt-1.5 text-[11px] text-ink-soft">Clear also removes their effort rating ({cur.rpe}/10).</p>
-                )}
+                </ul>
               </div>
-            );
-          })()}
-          <p className="text-[11px] text-ink-soft mt-2">
-            Tap a player to mark them present. Tap a marked player to change or clear it.
-          </p>
+              <p className="text-[11px] text-ink-soft">
+                Tap Present, Late or Away for each player. Tap it again to clear.
+              </p>
             </Card>
           </Section>
 
@@ -615,6 +597,19 @@ export default function TodayPage() {
           members={members.data ?? []}
         />
       </MountOnFirstOpen>
+
+      <ConfirmDialog
+        open={!!confirmClear}
+        title={`Clear ${confirmClear ? nameOf(confirmClear) : "this player"}'s check-in?`}
+        message={`This also removes the effort rating they logged${confirmClearRpe != null ? ` (${confirmClearRpe}/10)` : ""}.`}
+        confirmLabel="Clear check-in"
+        onConfirm={() => {
+          const id = confirmClear;
+          setConfirmClear(null);
+          if (id) commitStatus(id, null);
+        }}
+        onCancel={() => setConfirmClear(null)}
+      />
 
       <ConfirmDialog
         open={confirmUnmarkAll}
