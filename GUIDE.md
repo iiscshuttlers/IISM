@@ -42,7 +42,7 @@ A quick reference for players, coaches, and camp administrators.
 ### For Coaches
 - Create a session for the day (e.g. "Morning Session — Attack & Transition").
 - Add drills with target duration, sets, reps, and intensity (1–5).
-- Mark attendance (**Present**, **Late**, or **Absent**).
+- Mark attendance on **Today → At the hall**. Each player has a row with **Present**, **Late** and **Away** buttons: one tap sets it, and tapping the lit one again clears it. The list keeps itself sorted: present, late, away, on leave, then not marked.
 
 ### For Players — Rating of Perceived Exertion (RPE)
 At the end of every session, players or coaches log an RPE score from **1 to 10** reflecting how hard the session felt physically:
@@ -60,7 +60,7 @@ Consistent RPE logging helps coaches monitor fatigue, prevent injuries, and asse
 ### Leave and exams
 - **Players:** Away for exams, illness or travel? Tell the camp admin before you go. Once it's marked, you'll see it on your Today screen.
 - **Admin:** Mark it in **Settings → Leave and exams** (player, first and last day, reason). Only the admin can add, change or remove leave; coaches and the player can see it.
-- **What it changes:** Sessions missed on those days don't count against the player's attendance. On Today their name shows **Leave**, they're left out of **All present** and the not-marked count, and the pairing helper skips them. If they turn up anyway, mark them present as usual.
+- **What it changes:** Sessions missed on those days don't count against the player's attendance. On Today their row says **On leave** with the reason, they're left out of **All present** and the not-marked count, and the pairing helper skips them. If they turn up anyway, mark them present as usual.
 
 ---
 
