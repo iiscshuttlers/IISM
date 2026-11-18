@@ -5,6 +5,7 @@ import { CloudOff, Download, RefreshCw, Share, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
 import { flushOutbox, outbox, useOutbox } from "../lib/outbox";
+import { applyUpdate } from "../lib/swUpdate";
 import { Button, Card, Sheet, cx } from "./ui";
 
 // ───────── Online status ─────────
@@ -226,7 +227,8 @@ export function SyncEngine({ campId }: { campId: string }) {
 // ───────── Service worker update ─────────
 
 export function UpdatePrompt() {
-  const { needRefresh: [needRefresh, setNeedRefresh], updateServiceWorker } = useRegisterSW({
+  const [updating, setUpdating] = useState(false);
+  const { needRefresh: [needRefresh, setNeedRefresh] } = useRegisterSW({
     onRegisteredSW(_url, reg) {
       // Look for a new version every hour while the app stays open.
       if (reg) setInterval(() => { reg.update().catch(() => undefined); }, 60 * 60 * 1000);
@@ -234,12 +236,23 @@ export function UpdatePrompt() {
   });
   if (!needRefresh) return null;
   return (
-    <div className="fixed inset-x-3 bottom-20 z-50 mx-auto max-w-md rounded-xl border border-line bg-surface p-3 shadow-lg">
+    <div role="status" className="fixed inset-x-3 bottom-20 z-50 mx-auto max-w-md rounded-xl border border-line bg-surface p-3 shadow-lg">
       <div className="flex items-center gap-3">
-        <RefreshCw size={18} className="shrink-0 text-brand" />
-        <p className="flex-1 text-sm font-medium text-ink">A new version of the camp app is ready.</p>
-        <Button size="sm" variant="ghost" onClick={() => setNeedRefresh(false)}>Later</Button>
-        <Button size="sm" onClick={() => updateServiceWorker(true)}>Refresh</Button>
+        <RefreshCw size={18} className={cx("shrink-0 text-brand", updating && "motion-safe:animate-spin")} />
+        <p className="flex-1 text-sm font-medium text-ink">
+          {updating ? "Updating the camp app…" : "A new version of the camp app is ready."}
+        </p>
+        {!updating && <Button size="sm" variant="ghost" onClick={() => setNeedRefresh(false)}>Later</Button>}
+        <Button
+          size="sm"
+          disabled={updating}
+          onClick={() => {
+            setUpdating(true);
+            applyUpdate().catch(() => window.location.reload());
+          }}
+        >
+          {updating ? "Updating…" : "Refresh"}
+        </Button>
       </div>
     </div>
   );
