@@ -15,6 +15,7 @@ never touch club Elo, rankings, profiles or the feed.
 | Matches | Any signed-in member | Records MS/WS/MD/WD/XD results. Scores are optional; "who won" alone is enough. The recorder can edit for 24 h. A participant can dispute for 24 h. Coaches resolve or void. |
 | Standings | Everyone (or own row only) | Camp-only rating: start 1200, K = 32, doubles use the pair average, disputed and void matches excluded. |
 | Training | Any signed-in member | Sessions with focus and notes, drills (type, minutes, sets, reps, intensity), attendance and RPE per player. |
+| Attendance | Coaches and admin | One grid of every player against every session so far: present, late, away, on leave or not marked, with each player's attendance % (leave excluded). |
 | Selection | Coaches and admin | One board per player: rating, win %, attendance, drill minutes, RPE, coach assessments. Decide selected, standby or not selected, then lock. |
 | Squad | Players | Read-only list of the squad, shown after the admin locks and publishes it. Coach notes are never shown. |
 | Settings | Camp admin | Visibility (players and coaches, or coaches only), "players see all results", "publish squad", camp-wide activity switch, per-person activity switch. |

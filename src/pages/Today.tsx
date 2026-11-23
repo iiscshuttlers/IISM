@@ -4,7 +4,7 @@ import {
   Plus, LineChart, Radio, Sparkles, Calendar,
   UserCheck, Play, Megaphone,
   Package, HeartPulse, History, BookOpen,
-  Search, Share2, RotateCcw
+  Search, Share2, RotateCcw, Table2
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
@@ -286,9 +286,14 @@ export default function TodayPage() {
             className="order-1"
             title="At the hall"
             action={
-              <button type="button" onClick={shareBriefing} className="inline-flex items-center gap-1 hover:underline">
-                <Share2 size={13} /> Share briefing
-              </button>
+              <span className="flex items-center gap-4">
+                <Link href="/attendance" className="inline-flex items-center gap-1 hover:underline">
+                  <Table2 size={13} /> All days
+                </Link>
+                <button type="button" onClick={shareBriefing} className="inline-flex items-center gap-1 hover:underline">
+                  <Share2 size={13} /> Share briefing
+                </button>
+              </span>
             }
           >
             <Card className="space-y-4">

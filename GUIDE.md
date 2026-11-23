@@ -43,6 +43,7 @@ A quick reference for players, coaches, and camp administrators.
 - Create a session for the day (e.g. "Morning Session — Attack & Transition").
 - Add drills with target duration, sets, reps, and intensity (1–5).
 - Mark attendance on **Today → At the hall**. Each player has a row with **Present**, **Late** and **Away** buttons: one tap sets it, and tapping the lit one again clears it. The list keeps itself sorted: present, late, away, on leave, then not marked.
+- See every day at once on **Attendance** (staff): open **All days** on Today's register, the **Attendance** button in the Training log, or Attendance in the desktop sidebar. Each player is a row and each session is a column, newest on the left. Every cell shows **P** (present), **L** (late), **A** (away), **Lv** (on leave) or stays blank if nobody marked them. The number under each date is how many came, and the percentage next to each name leaves out days on leave. Tap a date to open that session and fix a mark. Filter by men or women, or sort with the lowest attendance first.
 
 ### For Players — Rating of Perceived Exertion (RPE)
 At the end of every session, players or coaches log an RPE score from **1 to 10** reflecting how hard the session felt physically:
