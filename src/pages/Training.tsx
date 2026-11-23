@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import {
   CheckCheck, CheckCircle2, ChevronRight, Circle, Dumbbell, Plus, Sparkles, Trash2, Timer,
-  PenTool, Package, BookOpen, Calendar, MessageSquare, RotateCcw, Wrench
+  PenTool, Package, BookOpen, Calendar, MessageSquare, RotateCcw, Table2, Wrench
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../lib/session";
@@ -56,6 +56,14 @@ export default function TrainingPage() {
         sub={sessionList.length ? `${sessionList.length} session${sessionList.length === 1 ? "" : "s"} · ${totalMinutes} min of drills` : undefined}
         action={
           <>
+            {/* Staff: who came on which day, across every session. */}
+            {s.isStaff && (
+              <Link href="/attendance" aria-label="Attendance by day">
+                <Button variant="secondary" tabIndex={-1}>
+                  <Table2 size={16} className="text-brand" /> <span className="hidden sm:inline">Attendance</span>
+                </Button>
+              </Link>
+            )}
             <Button variant="secondary" onClick={() => setToolsOpen(true)} aria-label="Training tools">
               <Wrench size={16} className="text-brand" /> <span className="hidden sm:inline">Tools</span>
             </Button>
